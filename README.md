@@ -36,7 +36,8 @@ This project is licensed under the [MIT License](./LICENSE) - see the `LICENSE` 
 
 ## Credits
 Built with [Selenium](https://www.selenium.dev)
-Images from the example is from:
+
+Images from the example are from:
 - [Seeklogo](https://seeklogo.com/)
 - [TYPE-MOON Fandom](https://typemoon.fandom.com/)
 - [Pinclipart](https://www.pinclipart.com/)
