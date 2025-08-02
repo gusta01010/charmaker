@@ -92,6 +92,13 @@ __pycache__/
 *.venv
 tempCodeRunnerFile.py
 
+# GitHub specific
+LICENSE
+README.md
+requirements.txt
+requirements-dev.txt
+package.json
+package-lock.json
 
 # Java
 *.jar
