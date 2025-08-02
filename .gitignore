@@ -1,0 +1,112 @@
+# Executables
+*.exe
+*.dll
+*.so
+*.dylib
+*.out
+*.app
+
+# Text
+*.txt
+
+# Images
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.ico
+*.svg
+*.webp
+*.raw
+
+# Compiled files
+*.class
+*.o
+*.obj
+*.pyc
+*.pyo
+*.pyd
+*.pyc__
+*.pyo__
+
+# Build directories
+build/
+dist/
+bin/
+obj/
+saved_characters/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.cache
+*.json
+
+# OS specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archives and compressed files
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.bz2
+
+# Media files
+*.mp3
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.wav
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+
+# Node.js
+node_modules/
+
+# Python
+__pycache__/
+*.egg-info/
+.pytest_cache/
+*.venv
+tempCodeRunnerFile.py
+
+
+# Java
+*.jar
+*.war
+*.ear
+
+# Dotnet
+*.dll
+*.pdb
+*.nupkg
+
+# Vim
+*.swp
+*.swo
+
+# Backup files
+*.bak
+*.backup
