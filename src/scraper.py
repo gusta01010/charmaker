@@ -53,7 +53,7 @@ def get_urls():
     
     while True:
         url = input("URL: ").strip()
-        if url.lower() == 'done':
+        if url.lower() == 'done' or url == '':
             break
         if not url:
             continue
