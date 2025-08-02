@@ -298,7 +298,7 @@ def main():
         os.makedirs(config['save_location'], exist_ok=True)
 
         print(f"\n{'='*60}")
-        print(" AI Character Creator from Web Content")
+        print("\t\t\t CharMaker")
         print(f"{'='*60}")
 
         provider = config.get('api_provider', 'groq')
