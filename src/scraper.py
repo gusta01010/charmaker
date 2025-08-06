@@ -366,14 +366,15 @@ def clean_and_format_text(soup):
         if tag_name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
             level = int(tag_name[1])
             # Skip headers that are too short or just numbers
-            if len(joined_content) < 3 or re.match(r'^\d+\.?$', joined_content):
+            if len(joined_content) < 2 or re.match(r'^\d+\.?$', joined_content):
                 return ""
             return f"\n{'#' * level} {joined_content}\n"
         elif tag_name == 'p':
             # Skip very short paragraphs that might be captions or labels
-            if len(joined_content.split()) < 3:
-                return joined_content + " "
             return f"{joined_content}\n"
+        elif tag_name == 'div': #div newline
+                if len(joined_content) > 2:
+                    return f"{joined_content}\n"
         elif tag_name == 'li':
             # Check parent to determine list type
             parent = element.find_parent(['ul', 'ol'])
