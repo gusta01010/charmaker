@@ -15,19 +15,49 @@ def sanitize_filename(name):
     return name[:100]
 
 def save_character_card(character_data, image_path, save_location):
-    """Saves character data to a tEXt chunk in a PNG image."""
+    """Saves character data to a tEXt chunk in a PNG image using V3 format."""
     try:
         card = {
+            "data": {
+                "name": character_data.get("NAME", ""),
+                "description": character_data.get("DESCRIPTION", ""),
+                "personality": character_data.get("PERSONALITY_SUMMARY", ""),
+                "first_mes": character_data.get("GREETING_MESSAGE", ""),
+                "avatar": "none",
+                "mes_example": character_data.get("EXAMPLE_MESSAGES", ""),
+                "scenario": character_data.get("SCENARIO", ""),
+                "creator_notes": "",
+                "system_prompt": "",
+                "post_history_instructions": "",
+                "alternate_greetings": [],
+                "tags": [],
+                "creator": "Anonymous",
+                "character_version": "",
+                "extensions": {
+                    "depth_prompt": {
+                        "prompt": "",
+                        "depth": 0,
+                        "role": "system"
+                    },
+                    "fav": False,
+                    "talkativeness": "0.5",
+                    "world": ""
+                },
+                "group_only_greetings": []
+            },
+            "spec": "chara_card_v3",
+            "spec_version": "3.0",
+            # these are duplicated at the root level for compatibility
             "name": character_data.get("NAME", ""),
+            "fav": False,
             "description": character_data.get("DESCRIPTION", ""),
             "personality": character_data.get("PERSONALITY_SUMMARY", ""),
             "scenario": character_data.get("SCENARIO", ""),
             "first_mes": character_data.get("GREETING_MESSAGE", ""),
-            "mes_example": character_data.get("EXAMPLE_MESSAGES", ""),
-            "spec": "chara_card_v2"
+            "mes_example": character_data.get("EXAMPLE_MESSAGES", "")
         }
 
-        chara_data_str = json.dumps(card)
+        chara_data_str = json.dumps(card, ensure_ascii=False)
         chara_data_base64 = base64.b64encode(chara_data_str.encode('utf-8')).decode('utf-8')
 
         img = Image.open(image_path)
