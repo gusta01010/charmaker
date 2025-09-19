@@ -217,7 +217,6 @@ def update_config_setting(config, setting_key, prompt, valid_values=None):
         print("No model name provided.")
 
     elif setting_key == 'api_key_setup':
-        config_manager.display_provider_status(config)
         provider = input("Enter provider to configure API key (groq/openrouter/gemini): ").lower().strip()
         if provider in ['groq', 'openrouter', 'gemini']:
             api_key = input(f"Enter API key for {provider}: ").strip()
