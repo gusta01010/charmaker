@@ -14,9 +14,7 @@ DEFAULT_CONFIG = {
         "groq": "llama-3.1-70b-versatile",
         "openrouter": "openai/gpt-4o-mini",
         "gemini": "gemini-2.0-flash-exp"
-    },
-    # Legacy support - will be migrated to provider_models
-    "model_name": "gemini-2.5-flash-lite"
+    }
 }
 
 def load_config():
@@ -30,9 +28,8 @@ def load_config():
             with open(CONFIG_FILE, 'r') as f:
                 config = json.load(f)
             
-            # Merge with defaults for any missing keys
             for key, value in DEFAULT_CONFIG.items():
-                if key not in config:
+                if key not in config and key != "model_name":
                     config[key] = value
             
             # Migration: Convert old model_name to provider-specific models
@@ -44,7 +41,10 @@ def load_config():
                 if current_provider in config["provider_models"]:
                     config["provider_models"][current_provider] = config["model_name"]
                 
-            # Ensure provider_models has all providers
+                print("Removing legacy model_name field after migration.")
+                del config["model_name"]
+                save_config(config)
+                
             if "provider_models" in config:
                 for provider in DEFAULT_CONFIG["provider_models"]:
                     if provider not in config["provider_models"]:
