@@ -446,11 +446,19 @@ def scrape_with_selenium(urls):
     all_text = ""
     print("Setting up Edge driver...")
     edge_options = EdgeOptions()
+    
+    edge_options.add_argument('--disable-blink-features=AutomationControlled')
+    edge_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    edge_options.add_experimental_option('useAutomationExtension', False)
+    
+    edge_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0')
+    
+    edge_options.add_argument('--disable-web-security')
+    edge_options.add_argument('--allow-running-insecure-content')
+    edge_options.add_argument('--disable-extensions')
     edge_options.add_argument('--headless')
-    edge_options.add_argument('--no-sandbox')
-    edge_options.add_argument('--disable-dev-shm-usage')
-    edge_options.add_argument('log-level=3')
-    edge_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+
+    
     
     try:
         service = EdgeService(executable_path=r"..\\msedgedriver.exe")
