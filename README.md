@@ -11,6 +11,7 @@ This simple open-source tool helps you create a desired character by appending t
 - Greeting messages
 
 Built with selenium.
+**Make sure to have the latest Microsoft Edge WebDriver (msedgedriver.exe)**
 
 ## Example
 
