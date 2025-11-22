@@ -46,6 +46,8 @@ saved_characters/
 *.cache
 *.json
 interface.py
+.*
+
 
 # OS specific
 .DS_Store
