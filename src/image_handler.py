@@ -23,22 +23,47 @@ class ImageHandler:
         parsed = urlparse(url.lower())
         path = parsed.path
         
-        # Direct extension check
+        # direct extension check first
         if any(path.endswith(ext) for ext in ImageHandler.SUPPORTED_FORMATS):
             return True
-            
-        # Check for image indicators in URL
-        image_indicators = ['image', 'img', 'photo', 'pic', 'thumb']
-        if any(indicator in url.lower() for indicator in image_indicators):
+        
+        image_indicators = ['image', 'img', 'photo', 'pic', 'thumb', 'avatar', 'banner']
+        url_parts = url.lower().replace('/', ' ').replace('-', ' ').replace('_', ' ').split()
+        
+        # only matches if indicator is a separate word/segment
+        if any(indicator in url_parts for indicator in image_indicators):
             return True
-            
-        # Check query parameters for image hints
+        
+        image_domains = [
+            'imgur.com', 'i.imgur.com',
+            'images.unsplash.com', 'unsplash.com',
+            'pixabay.com', 'pexels.com',
+            'flickr.com', 'staticflickr.com',
+            'googleusercontent.com',
+            'amazonaws.com',
+            'cloudfront.net',
+            'cdn.discordapp.com',
+            'media.discordapp.net'
+        ]
+        
+        domain = parsed.netloc.lower()
+        if any(img_domain in domain for img_domain in image_domains):
+            return True
+        
         query_params = parse_qs(parsed.query)
-        if 'f' in query_params or 'format' in query_params:
+        image_format_params = ['f', 'format', 'type', 'ext']
+        for param in image_format_params:
+            if param in query_params:
+                param_value = query_params[param][0].lower() if query_params[param] else ''
+                if any(fmt.strip('.') in param_value for fmt in ImageHandler.SUPPORTED_FORMATS):
+                    return True
+        
+        import re
+        if re.search(r'/(images?|img|photos?|pics?|media)/.*\.(jpg|jpeg|png|gif|webp|bmp)$', path):
             return True
-            
+        
         return False
-    
+        
     @staticmethod
     def load_from_url(url, timeout=10):
         """Load image from URL with robust error handling"""

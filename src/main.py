@@ -42,10 +42,10 @@ def get_inputs_from_user():
             if image_object:
                 print("✓ Image loaded from URL")
         else:
-            # Process as regular URL
+            # process as regular URL
             url = user_input if user_input.startswith('http') else 'https://' + user_input
             
-            # Use validation from scraper.py
+            # use validation from scraper.py
             if is_valid_url_format(url):
                 urls_to_scrape.append(url)
                 print(f"✓ Added '{url}' to scrape")
@@ -108,50 +108,59 @@ def count_tokens(text, model="gpt-4"):
 
 def run_character_creation_flow(config):
     """Main character creation workflow"""
-    urls, image_object = get_inputs_from_user()
-    if not urls and not image_object:
+    urls, initial_image_object = get_inputs_from_user()
+    if not urls and not initial_image_object:
         print("No content provided. Returning to menu.")
         return
     
-    # Scrape content if URLs provided
+    # scrape content if urls provided
     scraped_content = ""
     if urls:
         scraped_content = scrape_with_selenium(urls)
         if not scraped_content or not scraped_content.strip():
             print("Warning: No text content scraped.")
     
-    if not scraped_content and not image_object:
+    if not scraped_content and not initial_image_object:
         print("✗ Scraping failed and no image provided.")
         return
     
-    # Show content summary
+    # shows content summary
     content_info = []
     if scraped_content:
         token_count = count_tokens(scraped_content)
         content_info.append(f"text (~{token_count} tokens)")
-    if image_object:
+    if initial_image_object:
         content_info.append("image")
     
     if content_info:
         print(f"\n✓ Content ready: {' + '.join(content_info)}")
     
+    initial_instructions = input("\nEnter any additional instructions for the AI (optional, press Enter to skip):\n> ").strip()
+
     if input("Proceed with AI generation? (yes/no): ").lower() not in ['yes', 'y', '1']:
         return
-    
-    # Character generation loop
-    retry_message = None
+        
+
+    # these variables hold the state for the current generation attempt
+    content_for_generation = scraped_content
+    image_for_generation = initial_image_object
+    instructions_for_generation = initial_instructions
+
     while True:
         try:
-            response_text = APIHandler.generate_character(config, scraped_content, image_object, retry_message)
+            response_text = APIHandler.generate_character(
+                config, 
+                content_for_generation, 
+                image_for_generation, 
+                instructions_for_generation
+            )
+            
             character_details = parse_ai_response(response_text)
             
             if not character_details or not character_details.get("NAME"):
                 raise ValueError("No character data generated")
             
-            # Display results with colors
             print("\n--- Generated Character ---")
-            
-            # Color codes for different sections
             colors = {
                 "NAME": "\033[93m",           # Yellow
                 "DESCRIPTION": "\033[92m",    # Green  
@@ -173,8 +182,14 @@ def run_character_creation_flow(config):
             if action == '1':
                 handle_save(character_details, config['save_location'])
                 break
-            elif action == '2':
-                retry_message = input("Enter feedback/instructions: ").strip()
+            elif action == '2':                
+                content_for_generation = response_text
+                
+                instructions_for_generation = input("\nEnter feedback to refine the text above:\n> ").strip()
+                
+                image_for_generation = None
+                
+                print("\n✓ Ready to refine. The previous text will be used as the new context.")
             else:
                 print("Character discarded.")
                 break
