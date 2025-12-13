@@ -1,5 +1,8 @@
 import time
 import re
+import ssl
+import os
+import urllib3
 import requests
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup, NavigableString, Tag, Comment
@@ -9,6 +12,65 @@ from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+class TLSAdapter(HTTPAdapter):
+    """Custom adapter to handle various TLS/SSL configurations."""
+    
+    def __init__(self, ssl_context=None, **kwargs):
+        self.ssl_context = ssl_context
+        super().__init__(**kwargs)
+    
+    def init_poolmanager(self, *args, **kwargs):
+        if self.ssl_context:
+            kwargs['ssl_context'] = self.ssl_context
+        return super().init_poolmanager(*args, **kwargs)
+
+
+def create_session_with_retries(retries=3, backoff_factor=0.5, verify_ssl=True):
+    """Create a requests session with retry logic and SSL handling."""
+    session = requests.Session()
+    
+    # Configure retry strategy
+    retry_strategy = Retry(
+        total=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS"]
+    )
+    
+    # try with different SSL contexts if needed
+    if not verify_ssl:
+        # creates a permissive SSL context
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        # also try with older TLS versions for legacy sites
+        ssl_context.set_ciphers('DEFAULT:@SECLEVEL=1')
+        adapter = TLSAdapter(ssl_context=ssl_context, max_retries=retry_strategy)
+    else:
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+    
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    
+    # set common headers to avoid blocks
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+    })
+    
+    return session
 
 def is_valid_url_format(url):
     """Quick URL format validation - lightweight check for basic structure"""
@@ -30,17 +92,30 @@ def is_valid_url(url):
         if not parsed.scheme or not parsed.netloc:
             return False, "Invalid URL format"
         
-        # Quick HEAD request to check if URL is accessible
-        response = requests.head(url, timeout=10, allow_redirects=True)
-        if response.status_code >= 400:
-            return False, f"HTTP {response.status_code} error"
+        # Create session with retries and SSL handling
+        session = create_session_with_retries(retries=2, verify_ssl=True)
         
-        return True, "Valid"
+        try:
+            # quick HEAD request to check if URL is accessible
+            response = session.head(url, timeout=15, allow_redirects=True)
+            if response.status_code >= 400:
+                return False, f"HTTP {response.status_code} error"
+            return True, "Valid"
+        except (requests.exceptions.SSLError, ssl.SSLError):
+            # Retry without SSL verification
+            session = create_session_with_retries(retries=2, verify_ssl=False)
+            response = session.head(url, timeout=15, allow_redirects=True, verify=False)
+            if response.status_code >= 400:
+                return False, f"HTTP {response.status_code} error"
+            return True, "Valid (SSL bypassed)"
     
-    except requests.exceptions.ConnectionError:
+    except requests.exceptions.ConnectionError as e:
+        error_msg = str(e).lower()
+        if 'handshake' in error_msg or 'ssl' in error_msg or 'certificate' in error_msg:
+            return False, "SSL/TLS handshake failed - will try with Selenium"
         return False, "Connection failed - site may be down"
     except requests.exceptions.Timeout:
-        return False, "Connection timeout"
+        return False, "Connection timeout - will try with Selenium"
     except requests.exceptions.InvalidURL:
         return False, "Malformed URL"
     except Exception as e:
@@ -62,7 +137,12 @@ def get_urls():
         if not re.match(r'^https?:\/\/', url):
             url = 'https://' + url
         
-        # Validate URL
+        # Quick format validation first
+        if not is_valid_url_format(url):
+            print(f"✗ Invalid URL format: {url}")
+            continue
+        
+        # Validate URL accessibility
         print(f"Validating {url}...")
         is_valid, message = is_valid_url(url)
         
@@ -70,13 +150,19 @@ def get_urls():
             urls.append(url)
             print(f"✓ Added: {url}")
         else:
-            print(f"✗ Skipped: {message}")
-            
-            # Ask if user wants to add anyway
-            force_add = input("Add anyway? (y/N): ").lower().strip()
-            if force_add in ['y', 'yes', '1']:
+            # For SSL/connection errors, still allow adding since we have fallbacks
+            if 'ssl' in message.lower() or 'handshake' in message.lower() or 'will try' in message.lower():
+                print(f"⚠ {message}")
                 urls.append(url)
-                print(f"⚠ Added (forced): {url}")
+                print(f"✓ Added (will attempt with fallback methods): {url}")
+            else:
+                print(f"✗ Skipped: {message}")
+                
+                # Ask if user wants to add anyway
+                force_add = input("Add anyway? (y/N): ").lower().strip()
+                if force_add in ['y', 'yes', '1']:
+                    urls.append(url)
+                    print(f"⚠ Added (forced): {url}")
     
     return urls
 
@@ -435,10 +521,41 @@ def clean_and_format_text(soup):
         return ""
     
     return result
+
+
+def scrape_with_requests(url, verify_ssl=True):
+    """
+    Scrape a single URL using requests library.
+    Returns (content, success) tuple.
+    """
+    try:
+        session = create_session_with_retries(retries=3, verify_ssl=verify_ssl)
+        response = session.get(url, timeout=30, verify=verify_ssl)
+        response.raise_for_status()
+        
+        # Check if we got actual HTML content
+        content_type = response.headers.get('content-type', '').lower()
+        if 'text/html' not in content_type and 'text/plain' not in content_type:
+            return None, False
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        formatted_text = clean_and_format_text(soup)
+        
+        if formatted_text and len(formatted_text.strip()) > 50:
+            return formatted_text, True
+        return None, False
+        
+    except (requests.exceptions.SSLError, ssl.SSLError) as e:
+        if verify_ssl:
+            # Retry without SSL verification
+            return scrape_with_requests(url, verify_ssl=False)
+        return None, False
+    except Exception as e:
+        return None, False
     
 
-def scrape_with_selenium(urls):
-    """Scrape URLs using Selenium with better error handling."""
+def scrape_with_selenium(urls, use_requests_fallback=True):
+    """Scrape URLs using Selenium with better error handling and fallback options."""
     if not urls:
         print("No URLs provided for scraping.")
         return ""
@@ -447,57 +564,180 @@ def scrape_with_selenium(urls):
     print("Setting up Edge driver...")
     edge_options = EdgeOptions()
     
+    # Anti-detection settings
     edge_options.add_argument('--disable-blink-features=AutomationControlled')
-    edge_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     edge_options.add_experimental_option('useAutomationExtension', False)
     
+    # User agent
     edge_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0')
     
+    # SSL/TLS and security settings
     edge_options.add_argument('--disable-web-security')
     edge_options.add_argument('--allow-running-insecure-content')
-    edge_options.add_argument('--disable-extensions')
-    edge_options.add_argument('--headless')
-
+    edge_options.add_argument('--ignore-certificate-errors')
+    edge_options.add_argument('--ignore-ssl-errors')
+    edge_options.add_argument('--ignore-certificate-errors-spki-list')
+    edge_options.add_argument('--disable-features=IsolateOrigins,site-per-process')
     
+    # Performance and stability
+    edge_options.add_argument('--disable-extensions')
+    edge_options.add_argument('--disable-gpu')
+    edge_options.add_argument('--no-sandbox')
+    edge_options.add_argument('--disable-dev-shm-usage')
+    edge_options.add_argument('--disable-setuid-sandbox')
+    edge_options.add_argument('--headless=new')  # Use new headless mode
+    
+    # Memory optimization
+    edge_options.add_argument('--disable-software-rasterizer')
+    edge_options.add_argument('--disable-background-timer-throttling')
+    edge_options.add_argument('--disable-backgrounding-occluded-windows')
+    edge_options.add_argument('--disable-renderer-backgrounding')
+    
+    # Suppress console noise
+    edge_options.add_argument('--log-level=3')  # Only fatal errors
+    edge_options.add_argument('--silent')
+    edge_options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
+    
+    # Window size for proper rendering
+    edge_options.add_argument('--window-size=1920,1080')
+    
+    driver = None
+    driver_failed = False
     
     try:
-        service = EdgeService(executable_path=r"..\\msedgedriver.exe")
+        # Suppress Edge driver stderr output (GPU errors, etc.)
+        service = EdgeService(
+            executable_path=r"..\\msedgedriver.exe",
+            log_output=os.devnull
+        )
         driver = webdriver.Edge(service=service, options=edge_options)
+        
+        # Set page load timeout
+        driver.set_page_load_timeout(60)
+        driver.implicitly_wait(10)
+        
     except Exception as e:
-        print(f"✗ Driver initialization error: {e}")
-        return ""
+        print(f"⚠ Driver initialization warning: {e}")
+        print("Will use requests-based scraping as fallback.")
+        driver_failed = True
     
     successful_scrapes = 0
     total_urls = len(urls)
     
     for i, url in enumerate(urls, 1):
-        try:
-            print(f"[{i}/{total_urls}] Loading {url}...")
-            driver.get(url)
-            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-            time.sleep(3)
-            
-            # Get the page title
-            page_title = driver.title or "Untitled Page"
-            
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
-            formatted_text = clean_and_format_text(soup)
-            
-            if formatted_text:
-                # Use page title instead of URL in the header
-                all_text += f"\n\n{page_title}\n{'-' * len(page_title)}\n{formatted_text}"
-                successful_scrapes += 1
-                print(f"✓ Successfully scraped: {url}")
-            else:
-                print(f"⚠ Warning: No main content could be identified for: {url}")
+        scraped = False
+        formatted_text = None
+        page_title = "Untitled Page"
+        
+        # Try Selenium first if driver is available
+        if driver and not driver_failed:
+            try:
+                print(f"[{i}/{total_urls}] Loading {url} with Selenium...")
+                driver.get(url)
                 
-        except Exception as e:
-            print(f"✗ Error processing {url}: {e}")
+                # Multiple wait strategies for better content detection
+                try:
+                    # Wait for body first
+                    WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.TAG_NAME, "body"))
+                    )
+                    
+                    # Then wait for common content containers
+                    content_selectors = [
+                        (By.CSS_SELECTOR, "main, article, #content, .content, #main"),
+                        (By.CSS_SELECTOR, "p"),  # At least some paragraphs
+                    ]
+                    
+                    for selector in content_selectors:
+                        try:
+                            WebDriverWait(driver, 5).until(
+                                EC.presence_of_element_located(selector)
+                            )
+                            break
+                        except TimeoutException:
+                            continue
+                    
+                except TimeoutException:
+                    print(f"  ⚠ Page load timeout, attempting to extract available content...")
+                
+                # Wait for dynamic content to load
+                time.sleep(2)
+                
+                # Scroll to trigger lazy loading
+                try:
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
+                    time.sleep(1)
+                    driver.execute_script("window.scrollTo(0, 0);")
+                    time.sleep(0.5)
+                except:
+                    pass
+                
+                # Get page title
+                page_title = driver.title or "Untitled Page"
+                
+                # Get page source and parse
+                page_source = driver.page_source
+                
+                if page_source and len(page_source) > 500:
+                    soup = BeautifulSoup(page_source, 'html.parser')
+                    formatted_text = clean_and_format_text(soup)
+                    
+                    if formatted_text and len(formatted_text.strip()) > 50:
+                        scraped = True
+                        print(f"  ✓ Selenium scrape successful")
+                    else:
+                        print(f"  ⚠ Selenium returned empty/minimal content, trying fallback...")
+                else:
+                    print(f"  ⚠ Selenium returned empty page source, trying fallback...")
+                    
+            except TimeoutException as e:
+                print(f"  ⚠ Selenium timeout: {e}")
+            except WebDriverException as e:
+                error_msg = str(e).lower()
+                if 'handshake' in error_msg or 'ssl' in error_msg or 'certificate' in error_msg:
+                    print(f"  ⚠ SSL/TLS error with Selenium, trying fallback...")
+                else:
+                    print(f"  ⚠ Selenium error: {e}")
+            except Exception as e:
+                print(f"  ⚠ Selenium error: {e}")
+        
+        # fallback to requests if Selenium failed or wasn't available
+        if not scraped and use_requests_fallback:
+            print(f"  → Trying requests-based scraping for {url}...")
+            content, success = scrape_with_requests(url)
+            if success and content:
+                formatted_text = content
+                scraped = True
+                # try to get title from the content
+                try:
+                    session = create_session_with_retries(verify_ssl=False)
+                    resp = session.get(url, timeout=15, verify=False)
+                    soup = BeautifulSoup(resp.text, 'html.parser')
+                    title_tag = soup.find('title')
+                    if title_tag:
+                        page_title = title_tag.get_text(strip=True)
+                except:
+                    pass
+                print(f"  ✓ Requests fallback successful")
+        
+        # Add content if we got any
+        if scraped and formatted_text:
+            all_text += f"\n\n{page_title}\n{'-' * len(page_title)}\n{formatted_text}"
+            successful_scrapes += 1
+            print(f"✓ Successfully scraped: {url}")
+        else:
+            print(f"✗ Failed to scrape: {url} - No content extracted")
     
-    driver.quit()
+    # cleanup
+    if driver:
+        try:
+            driver.quit()
+        except:
+            pass
     
     # Summary
-    print(f"\nScraping complete: {successful_scrapes}/{total_urls} URLs successful")
+    print(f"\n{'='*50}")
+    print(f"Scraping complete: {successful_scrapes}/{total_urls} URLs successful")
     
     if not all_text.strip():
         print("⚠ Warning: No content was scraped from any URLs")
