@@ -8,7 +8,7 @@ from api_handler import APIHandler
 from scraper import scrape_with_selenium, is_valid_url_format
 from character_card import save_character_card
 import config_manager
-import file_dialogs
+import file_dialogs 
 
 def parse_ai_response(ai_response):
     """Extract character fields from AI response"""
