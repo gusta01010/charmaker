@@ -14,6 +14,19 @@ def open_image_dialog():
     )
     return filepath
 
+def open_images_dialog():
+    """Opens a file dialog to select multiple image files."""
+    root = tk.Tk()
+    root.withdraw()  # Hide the main window
+    filepaths = filedialog.askopenfilenames(
+        title="Select Images",
+        filetypes=(
+            ("Image Files", "*.png *.jpg *.jpeg *.webp"),
+            ("All files", "*.*")
+        )
+    )
+    return filepaths
+
 def open_folder_dialog(initial_dir="."):
     """Opens a folder selection dialog."""
     root = tk.Tk()

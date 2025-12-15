@@ -5,7 +5,7 @@ import requests
 import tempfile
 from image_handler import ImageHandler
 from api_handler import APIHandler
-from scraper import scrape_with_selenium, is_valid_url_format
+from scraper import scrape_with_selenium, scrape_images_from_urls, is_valid_url_format
 from character_card import save_character_card
 import config_manager
 import file_dialogs 
@@ -23,35 +23,39 @@ def parse_ai_response(ai_response):
 
 def get_inputs_from_user():
     """Get URLs and image from user input with improved validation"""
-    urls_to_scrape, image_object = [], None
+    urls_to_scrape, image_objects = [], []
     print("\n--- Content Input ---")
-    print("Enter URLs to scrape, image URLs, or '!' for local file.")
+    print("Enter URLs to scrape images from, direct image URLs, or '!' for local file(s).")
     print("Type 'done' when finished, or press Enter on empty line.")
     
     while True:
-        user_input = input("URL, image URL, or command (!): ").strip()
+        user_input = input("image URL, or command (!): ").strip()
         
         # Check for exit conditions
         if not user_input or user_input.lower() == 'done':
             break
             
         if user_input == '!':
-            image_object = ImageHandler.load_image(user_input)
+            new_images = ImageHandler.load_images(user_input)
+            if new_images:
+                image_objects.extend(new_images)
+                print(f"✓ {len(new_images)} images loaded from files")
         elif ImageHandler.is_image_url(user_input):
-            image_object = ImageHandler.load_image(user_input)
-            if image_object:
+            new_images = ImageHandler.load_images(user_input)
+            if new_images:
+                image_objects.extend(new_images)
                 print("✓ Image loaded from URL")
         else:
-            # process as regular URL
+            # process as regular URL (will extract images from this page)
             url = user_input if user_input.startswith('http') else 'https://' + user_input
             
             # use validation from scraper.py
             if is_valid_url_format(url):
                 urls_to_scrape.append(url)
-                print(f"✓ Added '{url}' to scrape")
+                print(f"✓ Added '{url}' to scrape images from")
             else:
                 print(f"✗ Invalid URL format: '{user_input}'")
-    return urls_to_scrape, image_object
+    return urls_to_scrape, image_objects
 
 def get_character_image():
     """Get image for character card with improved handling"""
@@ -108,32 +112,37 @@ def count_tokens(text, model="gpt-4"):
 
 def run_character_creation_flow(config):
     """Main character creation workflow"""
-    urls, initial_image_object = get_inputs_from_user()
-    if not urls and not initial_image_object:
+    urls, image_objects = get_inputs_from_user()
+    if not urls and not image_objects:
         print("No content provided. Returning to menu.")
         return
     
-    # scrape content if urls provided
-    scraped_content = ""
+    # Extract images from URLs if provided
     if urls:
-        scraped_content = scrape_with_selenium(urls)
-        if not scraped_content or not scraped_content.strip():
-            print("Warning: No text content scraped.")
+        print("\n--- Extracting Images from URLs ---")
+        scraped_image_urls = scrape_images_from_urls(urls)
+        
+        if scraped_image_urls:
+            print(f"\n✓ Found {len(scraped_image_urls)} image URLs")
+            print("\n--- Loading Images ---")
+            
+            loaded_count = 0
+            for img_url in scraped_image_urls:
+                img = ImageHandler.load_from_url(img_url)
+                if img:
+                    image_objects.append(img)
+                    loaded_count += 1
+            
+            print(f"✓ Successfully loaded {loaded_count}/{len(scraped_image_urls)} images")
+        else:
+            print("⚠ No images found on the provided URLs")
     
-    if not scraped_content and not initial_image_object:
-        print("✗ Scraping failed and no image provided.")
+    if not image_objects:
+        print("✗ No images to process.")
         return
     
     # shows content summary
-    content_info = []
-    if scraped_content:
-        token_count = count_tokens(scraped_content)
-        content_info.append(f"text (~{token_count} tokens)")
-    if initial_image_object:
-        content_info.append("image")
-    
-    if content_info:
-        print(f"\n✓ Content ready: {' + '.join(content_info)}")
+    print(f"\n✓ Content ready: {len(image_objects)} images")
     
     initial_instructions = input("\nEnter any additional instructions for the AI (optional, press Enter to skip):\n> ").strip()
 
@@ -142,8 +151,8 @@ def run_character_creation_flow(config):
         
 
     # these variables hold the state for the current generation attempt
-    content_for_generation = scraped_content
-    image_for_generation = initial_image_object
+    content_for_generation = ""  # No text content in image-only mode
+    images_for_generation = image_objects
     instructions_for_generation = initial_instructions
 
     while True:
@@ -151,7 +160,7 @@ def run_character_creation_flow(config):
             response_text = APIHandler.generate_character(
                 config, 
                 content_for_generation, 
-                image_for_generation, 
+                images_for_generation, 
                 instructions_for_generation
             )
             
@@ -187,7 +196,7 @@ def run_character_creation_flow(config):
                 
                 instructions_for_generation = input("\nEnter feedback to refine the text above:\n> ").strip()
                 
-                image_for_generation = None
+                images_for_generation = None
                 
                 print("\n✓ Ready to refine. The previous text will be used as the new context.")
             else:
@@ -311,9 +320,9 @@ def main():
     while True:
         os.makedirs(config['save_location'], exist_ok=True)
 
-        print(f"\n{'='*60}")
-        print("\t\t\t CharMaker")
-        print(f"{'='*60}")
+        print(f"\n{'='*100}")
+        print("\t\t\t CharMaker - CFTF (Card for this feeling) Edition")
+        print(f"{'='*100}")
 
         provider = config.get('api_provider', 'groq')
         model = config_manager.get_current_model(config)

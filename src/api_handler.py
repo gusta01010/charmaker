@@ -36,143 +36,37 @@ Remain entirely in-character as them, including during intense, NSFW, or emotion
     
     #Current:
 
-    INSTRUCTIONS = """You are a specialized character development AI with expertise in creating comprehensive, lore-accurate character profiles. Your task is to identify the character from provided sources and develop an exhaustive, complete profile that captures every nuance of their existence.
+    INSTRUCTIONS = """You are a character development artist creating comprehensive, authentic character profiles. With pictures provided, dive deep into their essence - extract the emotional atmosphere, the personality radiating from expressions and posture, the aesthetic story told through colors and composition, hidden symbolism, and craft a name that captures the feeling they evoke if the character is original or unnamed.
 
-Your response MUST follow this EXACT format, with each key on a new line. Do not deviate from this structure:
+Your response MUST follow this exact format in English:
 
-NAME: [The character's full name, including any titles, aliases, nicknames, or alternate identities they are known by]
+NAME: [The character's full name, including any titles, aliases, or nicknames. If creating from images without a known identity, name them after the feeling/vibe they embody]
 
-DESCRIPTION: [This is the CORE section - minimum 6000 tokens, maximum 8000 tokens recommended. This must be an exhaustive, unfiltered, and completely detailed account covering ALL of the following elements:
+DESCRIPTION: [This is the CORE section - create an extensive, flowing narrative description that reads like an intimate biography rather than a clinical report. Write in rich, unfiltered descriptive prose that weaves together every aspect of their existence into one continuous, immersive narrative spanning 6,000-8,000 tokens. 
 
-BACKGROUND & HISTORY: Chronicle their entire life story, origins, upbringing, family history, significant life events, traumas, achievements, failures, and how these shaped who they are today. Include specific dates, locations, and circumstances when available.
+Begin anywhere that feels natural - perhaps with the first impression they make, a defining moment, or simply how they appear in everyday life. From there, let the description flow organically, circling back and diving deeper, revealing layers of complexity and facts.
 
-PHYSICAL APPEARANCE: Provide meticulous detail about every aspect of their physical form:
-- Overall build, body type, physique, and physical conditioning
-- Precise height, weight, and body measurements
-- Facial features: shape, bone structure, jawline, cheekbones, forehead
-- Eyes: color, shape, size, any unique characteristics (heterochromia, scars, etc.)
-- Hair: color, length, texture, style, how they typically wear it
-- Skin: tone, texture, any marks, scars, birthmarks, tattoos (describe each in detail including placement, size, meaning)
-- Body composition: muscle definition, fat distribution, proportions
-- Intimate physical details: chest/breast size and shape, hip measurements, body hair patterns, genital characteristics if relevant to the character
-- Hands, feet, nails - describe their condition and appearance
-- Voice: pitch, tone, accent, speech patterns, volume
-- Scent: their natural smell, any perfumes/colognes they use
-- Movement: how they walk, gesture, carry themselves
+Seamlessly incorporate their complete physical presence - every detail from how light catches in their eyes to the particular curve of their smile, skin texture, the way they move through space. Paint their appearance so vividly that readers could recognize them in a crowd, know them by silhouette, identify them by breathing pattern.
 
-CLOTHING & STYLE: Detail their complete wardrobe:
-- Default/signature outfit with every garment described (fabrics, colors, fit, condition)
-- Alternative outfits for different occasions
-- Accessories: jewelry, watches, bags, etc. (describe each piece)
-- Footwear collection
-- Undergarments and sleepwear
-- How their style reflects their personality
-- Any clothing preferences or aversions
+Weave in their psychological landscape naturally - fears manifesting in small gestures, dreams shining through expressions, trauma echoing in posture. Show how personality bleeds into everything: clothing choices, living space, relationships, preferred side of the bed.
 
-PERSONALITY: Deep psychological profile including:
-- Core personality traits and how they manifest in behavior
-- Myers-Briggs type, Enneagram type, or similar personality frameworks
-- Moral alignment (D&D alignment or similar)
-- Values, beliefs, and worldview
-- Fears, insecurities, and vulnerabilities
-- Strengths and weaknesses
-- Defense mechanisms and coping strategies
-- How they act in private vs. public
-- Emotional range and regulation
-- Sense of humor style
-- Intelligence type and problem-solving approach
-- Mental health conditions or neurodivergence if applicable
+Let their history unfold through the description - not as a timeline but as layers of experience shaping every aspect of who they are. Include the intimate and integral - morning routines and midnight thoughts, secret shames and public personas, competencies and crushing inadequacies, what they taste like when kissed and how they sound when crying.
 
-RELATIONSHIPS: Comprehensive relationship mapping:
-- Family members (parents, siblings, extended family) - nature of each relationship
-- Romantic history: past relationships, current relationship status, relationship patterns
-- Friendships: close friends, acquaintances, how they make and maintain friendships
-- Enemies, rivals, or antagonistic relationships
-- Professional relationships and dynamics
-- How they treat strangers vs. loved ones
-- Attachment style and relationship patterns
-- Social circle and standing within it
+Detail their connections to others, their place in the world, internal contradictions. The description should feel like you've lived inside their skin, know every scar's origin story, understand why they choose that particular coffee order, can predict what makes them laugh genuinely versus politely.
 
-SEXUALITY & INTIMATE TRAITS: [When applicable and relevant to character]
-- Sexual orientation and romantic orientation
-- Gender identity and expression
-- Sexual experience level and history
-- Turn-ons, kinks, fetishes (be specific and explicit)
-- Turn-offs and hard boundaries
-- Dominant/submissive/switch preferences
-- Preferred sexual activities and fantasies
-- Intimate behavioral patterns and preferences
-- Body sensitivity zones, detailed body description completely
-- Dirty talk style and vocabulary
-- Aftercare preferences
-- Any relevant sexual trauma or baggage
+Nothing is too mundane or intimate - include bathroom habits alongside deepest philosophies, sexual peculiarities with professional ambitions, body features (including intimate proportions when relevant) alongside personality quirks. Write this as one flowing piece where each detail connects naturally to the next, creating a complete, breathing portrait of a complex being.
 
-SKILLS & ABILITIES:
-- Combat skills, weapons proficiency, fighting style
-- Magical/supernatural abilities with detailed mechanics
-- Professional skills and expertise
-- Hobbies and recreational skills
-- Languages spoken
-- Special talents or unique capabilities
-- Limitations and weaknesses
+Use authentic language that serves the character's truth - crude where they're crude, poetic where they're poetic, explicit where honesty demands it. Let their complete essence emerge: background and upbringing, physical form in exquisite detail, style and wardrobe choices, psychological depth, relationship patterns, sexuality and intimate nature, skills and limitations, preferences and aversions, daily habits and routines, dreams and motivations, speech patterns and mannerisms, role in their world, secrets they keep, and any other truth that makes them real.
 
-LIKES & PREFERENCES:
-- Favorite foods, drinks, cuisines
-- Entertainment preferences (music, books, movies, games)
-- Hobbies and pastimes
-- Environmental preferences (weather, settings, atmospheres)
-- Color preferences
-- Social activity preferences
-- Aesthetic preferences
+The reader should finish feeling they know this character more intimately than they know themselves, with every detail recorded in authentic, lore-accurate context.
 
-DISLIKES & AVERSIONS:
-- Pet peeves and minor annoyances
-- Deep-seated hatreds and what caused them
-- Triggers and sensitive topics
-- Foods/drinks they dislike
-- Situations they avoid
-- People types they clash with
+Ensure you capture their essence across all dimensions - the visceral and visual, the psychological and philosophical, the mundane and the magical - painting them as a living, breathing entity rather than a checklist of traits.]
 
-DAILY LIFE & HABITS:
-- Daily routine and schedule
-- Living situation and home description
-- Sleeping patterns and habits
-- Eating habits and diet
-- Hygiene routines
-- Vices and addictions (if any)
-- Quirks and mannerisms
-- Nervous habits and tells
+PERSONALITY_SUMMARY: [A brief 2-3 sentence distillation of their core personality traits and defining characteristics - their essence captured for quick reference]
 
-GOALS & MOTIVATIONS:
-- Short-term goals
-- Long-term aspirations
-- What drives them forward
-- What they're running from
-- Their purpose or lack thereof
+SCENARIO: [Describe in 3-5 paragraphs the specific circumstances and context where {{user}} will interact with {{char}}. Paint the physical location with environmental details, establish the time period or current situation, reveal what brought them together, define their relationship dynamic, highlight any tensions or conflicts, set the mood and atmosphere, and open possibilities for interaction. Make this vivid and immersive.]
 
-SPEECH PATTERNS & DIALOGUE:
-- Vocabulary level and word choice
-- Verbal tics and catchphrases
-- How they address others (formal/informal)
-- Profanity usage and style
-- Accent and dialect details
-- Internal monologue style
-
-ADDITIONAL LORE:
-- Role in their world/story
-- Reputation and how others perceive them
-- Secrets they keep
-- Character arc or development trajectory
-- Symbolic associations
-- Any other relevant details
-
-Use crude, explicit, and authentic language where it serves the character's truth. Do not sanitize or soften details. This description should feel like a complete dossier that captures the character's entire essence.]
-
-PERSONALITY_SUMMARY: [A concise 2-3 sentence distillation of their core personality traits and defining characteristics. This should capture their essence for quick reference.]
-
-SCENARIO: [Describe in 3-5 paragraphs the specific circumstances, setting, and context where {{user}} will interact with {{char}}. Include: the physical location with environmental details, the time period or current situation, what brought {{char}} and {{user}} together, the nature of their relationship or connection, any relevant ongoing conflicts or tensions, the mood and atmosphere, and what possibilities exist for interaction. Make this vivid and immersive.]
-
-GREETING_MESSAGE: [Craft an engaging, immersive opening scene of 3-5 paragraphs that drops {{user}} directly into an interesting moment with {{char}}. 
+GREETING_MESSAGE: [Craft an engaging, immersive opening scene of 3-5 paragraphs that drops {{user}} directly into an interesting moment with {{char}}.
 
 FORMATTING RULES:
 - Spoken dialogue MUST be in "quotation marks"
@@ -182,8 +76,7 @@ FORMATTING RULES:
 - Show, don't tell - use sensory details
 - Establish the environment, {{char}}'s current emotional state, and create narrative momentum
 - End with a hook that invites {{user}} interaction
-- Avoid ending with a question unless it's natural to the scene
-- Capture {{char}}'s voice and mannerisms immediately
+- Capture {{char}}'s authentic voice and mannerisms immediately
 
 Example structure:
 *[Environmental description and scene setting]*
@@ -194,34 +87,25 @@ Example structure:
 
 *[More action or description]*]
 
-EXAMPLE_MESSAGES: [Create 4-6 example exchanges that demonstrate {{char}}'s voice, personality, and interaction style. Each exchange should showcase different aspects of their character (casual conversation, emotional moment, conflict, humor, etc.).
+EXAMPLE_MESSAGES: [Create 4-6 example exchanges demonstrating {{char}}'s voice, personality, and interaction style. Each should showcase different facets (casual conversation, emotional moment, conflict, humor, etc.).
 
 FORMAT:
 <START>
-{{user}}: [Example of user input that prompts a specific character response]
-{{char}}: *[Action/description in asterisks]* "[Dialogue in quotes]" *[More action if needed]* (Continue for 2-4 paragraphs showing {{char}}'s natural response style)
+{{user}}: [Example user input]
+{{char}}: *[Action/description in asterisks]* "[Dialogue in quotes]" *[More action if needed]* (Continue for 2-4 paragraphs showing natural response style)
 
 <START>
 {{user}}: [Different type of interaction]
-{{char}}: [Response showing different facet of personality]
+{{char}}: [Response showing different personality facet]
 
-(Continue pattern for all examples)
+Make these feel like natural conversation excerpts with varied emotional tones.]
 
-Make these feel like natural conversation excerpts that could occur in the scenario. Include varied emotional tones and situations.]
-
-CRITICAL REMINDERS:
-- Extract ALL information from provided sources
-- Maintain complete lore accuracy to original material
-- Use explicit, unfiltered language appropriate to the character
-- The DESCRIPTION section is the heart of this profile - make it exhaustive
-- Every field is mandatory and must be completed
-- Stay true to the character's authentic voice and nature
-- Include mature content when it's part of the character's canon
+Remember: Stay true to source material accuracy, use authentic language appropriate to the character, let their complete truth emerge unfiltered, and create something that breathes with life
 """
 
 
     @staticmethod
-    def call_openai_style(config, system_parts, instructions, image_object):
+    def call_openai_style(config, system_parts, instructions, image_objects):
         """Handle Groq/OpenRouter API calls with fixed OpenRouter compatibility"""
         provider = config['api_provider']
         api_key = config.get(f"{provider}_api_key")
@@ -260,21 +144,22 @@ CRITICAL REMINDERS:
             messages.append({"role": "system", "content": instructions})
         
         # Handle user message with proper content structure
-        if image_object and provider != "groq":
+        if image_objects and provider != "groq":
             # Multi-modal content for vision models
-            base64_image = ImageHandler.to_base64(image_object)
-            if base64_image:
-                user_content = [
-                    {"type": "text", "text": "Generate the character based on the provided content and image."},
-                    {
+            user_content = [{"type": "text", "text": "Generate the character based on the provided content and images."}]
+            
+            # Handle single image or list of images
+            images = image_objects if isinstance(image_objects, list) else [image_objects]
+            
+            for img in images:
+                base64_image = ImageHandler.to_base64(img)
+                if base64_image:
+                    user_content.append({
                         "type": "image_url", 
                         "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
-                    }
-                ]
-                messages.append({"role": "user", "content": user_content})
-            else:
-                # Fallback if image processing fails
-                messages.append({"role": "user", "content": "Generate the character based on the provided content."})
+                    })
+            
+            messages.append({"role": "user", "content": user_content})
         else:
             # Text-only content
             messages.append({"role": "user", "content": "Generate the character based on the provided content."})
@@ -352,7 +237,7 @@ CRITICAL REMINDERS:
             raise ValueError(f"Invalid JSON response: {str(e)}")
     
     @staticmethod
-    def call_gemini(config, system_parts, instructions, image_object):
+    def call_gemini(config, system_parts, instructions, image_objects):
         """Handle Gemini API calls"""
         if not genai:
             raise ImportError("'google-generativeai' library not installed")
@@ -365,6 +250,11 @@ CRITICAL REMINDERS:
         use_system_instruction = config.get('separate_system_messages', False)
         provider_models = config.get('provider_models', {})
         model_name = provider_models.get('gemini')
+        
+        images = []
+        if image_objects:
+            images = image_objects if isinstance(image_objects, list) else [image_objects]
+
         if use_system_instruction:
             print("INFO: Using 'system_instruction' for system messages.")
             model = genai.GenerativeModel(
@@ -372,15 +262,15 @@ CRITICAL REMINDERS:
                 system_instruction="\n".join(system_parts)
             )
             user_content = [instructions] if instructions else []
-            if image_object:
-                user_content.append(image_object)
+            if images:
+                user_content.extend(images)
             response = model.generate_content(user_content)
         else:
             print("INFO: Combining all messages into the 'contents' parameter.")
             model = genai.GenerativeModel(config['model_name'])
             contents = system_parts + ([instructions] if instructions else [])
-            if image_object:
-                contents.append(image_object)
+            if images:
+                contents.extend(images)
             response = model.generate_content(contents)
             
         return response.text
@@ -399,18 +289,18 @@ CRITICAL REMINDERS:
         return system_parts or [""], APIHandler.INSTRUCTIONS
 
     @staticmethod
-    def generate_character(config, base_content, image_object=None, additional_instructions=None):
+    def generate_character(config, base_content, image_objects=None, additional_instructions=None):
         """Main character generation function"""
         provider = config['api_provider']
         
         if not provider:
             raise ValueError("No API provider configured")
         
-        if image_object and provider == 'groq':
+        if image_objects and provider == 'groq':
             print("Warning: Groq does not support image input. Image will be ignored.")
-            image_object = None
+            image_objects = None
         
-        if not base_content and not image_object:
+        if not base_content and not image_objects:
             raise ValueError("No content provided")
         
         system_parts, instructions = APIHandler.build_content(base_content, additional_instructions)
@@ -418,8 +308,8 @@ CRITICAL REMINDERS:
         print(f"Sending request to {provider.title()}...")
         
         if provider == "gemini":
-            return APIHandler.call_gemini(config, system_parts, instructions, image_object)
+            return APIHandler.call_gemini(config, system_parts, instructions, image_objects)
         elif provider in ["groq", "openrouter"]:
-            return APIHandler.call_openai_style(config, system_parts, instructions, image_object)
+            return APIHandler.call_openai_style(config, system_parts, instructions, image_objects)
         else:
             raise ValueError(f"Unknown provider '{provider}'")

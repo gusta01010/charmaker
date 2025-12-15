@@ -554,6 +554,236 @@ def scrape_with_requests(url, verify_ssl=True):
         return None, False
     
 
+def extract_image_urls(soup, base_url):
+    """Extract all image URLs from a page with comprehensive detection."""
+    image_urls = set()
+    
+    # 1. Find all <img> tags
+    for img in soup.find_all('img'):
+        src = img.get('src') or img.get('data-src') or img.get('data-lazy-src')
+        srcset = img.get('srcset') or img.get('data-srcset')
+        
+        # Process src
+        if src:
+            image_urls.add(src)
+        
+        # Process srcset (contains multiple images at different resolutions)
+        if srcset:
+            for entry in srcset.split(','):
+                url = entry.strip().split()[0]
+                image_urls.add(url)
+    
+    # 2. Find images in <picture> tags
+    for picture in soup.find_all('picture'):
+        for source in picture.find_all('source'):
+            srcset = source.get('srcset') or source.get('data-srcset')
+            if srcset:
+                for entry in srcset.split(','):
+                    url = entry.strip().split()[0]
+                    image_urls.add(url)
+    
+    # 3. Find background images in style attributes
+    for element in soup.find_all(style=True):
+        style = element.get('style', '')
+        bg_urls = re.findall(r'url\(["\']?([^"\'()]+)["\']?\)', style)
+        for url in bg_urls:
+            if re.search(r'\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$', url, re.I):
+                image_urls.add(url)
+    
+    # 4. Find images in inline <style> tags
+    for style_tag in soup.find_all('style'):
+        style_content = style_tag.string or ''
+        bg_urls = re.findall(r'url\(["\']?([^"\'()]+)["\']?\)', style_content)
+        for url in bg_urls:
+            if re.search(r'\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$', url, re.I):
+                image_urls.add(url)
+    
+    # 5. Find images in meta tags (Open Graph, Twitter Cards, etc.)
+    for meta in soup.find_all('meta'):
+        property_val = meta.get('property', '').lower()
+        name_val = meta.get('name', '').lower()
+        
+        if any(x in property_val or x in name_val for x in ['image', 'og:image', 'twitter:image']):
+            content = meta.get('content')
+            if content:
+                image_urls.add(content)
+    
+    # 6. Find images in <link> tags
+    for link in soup.find_all('link', rel=re.compile(r'image|icon', re.I)):
+        href = link.get('href')
+        if href:
+            image_urls.add(href)
+    
+    # 7. Find data attributes commonly used for lazy loading
+    for element in soup.find_all(attrs={'data-bg': True}):
+        image_urls.add(element['data-bg'])
+    
+    for element in soup.find_all(attrs={'data-background': True}):
+        image_urls.add(element['data-background'])
+    
+    for element in soup.find_all(attrs={'data-image': True}):
+        image_urls.add(element['data-image'])
+    
+    # Convert relative URLs to absolute
+    from urllib.parse import urljoin
+    absolute_urls = set()
+    for url in image_urls:
+        if url:
+            # Clean up the URL
+            url = url.strip()
+            # Skip data URIs and very short strings
+            if url.startswith('data:') or len(url) < 5:
+                continue
+            # Convert to absolute URL
+            absolute_url = urljoin(base_url, url)
+            # Only keep URLs that look like images
+            if re.search(r'\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$', absolute_url, re.I) or \
+               any(x in absolute_url.lower() for x in ['/image/', '/img/', '/photo/', '/picture/']):
+                absolute_urls.add(absolute_url)
+    
+    return sorted(list(absolute_urls))
+
+
+def scrape_images_from_urls(urls, use_requests_fallback=True):
+    """Extract image URLs from web pages using Selenium with fallback to requests."""
+    if not urls:
+        print("No URLs provided for scraping.")
+        return []
+    
+    all_image_urls = []
+    print("Setting up Edge driver...")
+    edge_options = EdgeOptions()
+    
+    # Anti-detection settings
+    edge_options.add_argument('--disable-blink-features=AutomationControlled')
+    edge_options.add_experimental_option('useAutomationExtension', False)
+    
+    # User agent
+    edge_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0')
+    
+    # SSL/TLS and security settings
+    edge_options.add_argument('--disable-web-security')
+    edge_options.add_argument('--allow-running-insecure-content')
+    edge_options.add_argument('--ignore-certificate-errors')
+    edge_options.add_argument('--ignore-ssl-errors')
+    edge_options.add_argument('--ignore-certificate-errors-spki-list')
+    
+    # Performance and stability
+    edge_options.add_argument('--disable-extensions')
+    edge_options.add_argument('--disable-gpu')
+    edge_options.add_argument('--no-sandbox')
+    edge_options.add_argument('--disable-dev-shm-usage')
+    edge_options.add_argument('--headless=new')
+    edge_options.add_argument('--log-level=3')
+    edge_options.add_argument('--silent')
+    edge_options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
+    edge_options.add_argument('--window-size=1920,1080')
+    
+    driver = None
+    driver_failed = False
+    
+    try:
+        service = EdgeService(
+            executable_path=r"..\\msedgedriver.exe",
+            log_output=os.devnull
+        )
+        driver = webdriver.Edge(service=service, options=edge_options)
+        driver.set_page_load_timeout(60)
+        driver.implicitly_wait(10)
+    except Exception as e:
+        print(f"⚠ Driver initialization warning: {e}")
+        print("Will use requests-based scraping as fallback.")
+        driver_failed = True
+    
+    successful_scrapes = 0
+    total_urls = len(urls)
+    
+    for i, url in enumerate(urls, 1):
+        scraped = False
+        image_urls = []
+        
+        # Try Selenium first if driver is available
+        if driver and not driver_failed:
+            try:
+                print(f"[{i}/{total_urls}] Loading {url} with Selenium...")
+                driver.get(url)
+                
+                try:
+                    WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.TAG_NAME, "body"))
+                    )
+                except TimeoutException:
+                    print(f"  ⚠ Page load timeout, attempting to extract available images...")
+                
+                # Scroll to load lazy images
+                time.sleep(2)
+                try:
+                    # Scroll down in steps to trigger lazy loading
+                    for scroll_step in range(5):
+                        driver.execute_script(f"window.scrollTo(0, document.body.scrollHeight * {scroll_step/5});")
+                        time.sleep(0.5)
+                    driver.execute_script("window.scrollTo(0, 0);")
+                    time.sleep(0.5)
+                except:
+                    pass
+                
+                page_source = driver.page_source
+                
+                if page_source and len(page_source) > 500:
+                    soup = BeautifulSoup(page_source, 'html.parser')
+                    image_urls = extract_image_urls(soup, url)
+                    
+                    if image_urls:
+                        scraped = True
+                        print(f"  ✓ Found {len(image_urls)} images with Selenium")
+                    else:
+                        print(f"  ⚠ No images found with Selenium, trying fallback...")
+                else:
+                    print(f"  ⚠ Selenium returned empty page source, trying fallback...")
+                    
+            except Exception as e:
+                print(f"  ⚠ Selenium error: {e}")
+        
+        # Fallback to requests if Selenium failed or wasn't available
+        if not scraped and use_requests_fallback:
+            print(f"  → Trying requests-based scraping for {url}...")
+            try:
+                session = create_session_with_retries(verify_ssl=False)
+                response = session.get(url, timeout=15, verify=False)
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.text, 'html.parser')
+                image_urls = extract_image_urls(soup, url)
+                
+                if image_urls:
+                    scraped = True
+                    print(f"  ✓ Found {len(image_urls)} images with requests fallback")
+            except Exception as e:
+                print(f"  ⚠ Requests fallback error: {e}")
+        
+        # Add images if we found any
+        if scraped and image_urls:
+            all_image_urls.extend(image_urls)
+            successful_scrapes += 1
+            print(f"✓ Successfully scraped images from: {url}")
+        else:
+            print(f"✗ Failed to scrape images from: {url}")
+    
+    # Cleanup
+    if driver:
+        try:
+            driver.quit()
+        except:
+            pass
+    
+    # Summary
+    print(f"\n{'='*50}")
+    print(f"Image scraping complete: {successful_scrapes}/{total_urls} URLs successful")
+    print(f"Total images found: {len(all_image_urls)}")
+    
+    return all_image_urls
+
+
 def scrape_with_selenium(urls, use_requests_fallback=True):
     """Scrape URLs using Selenium with better error handling and fallback options."""
     if not urls:

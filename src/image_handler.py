@@ -130,6 +130,30 @@ class ImageHandler:
         else:
             print(f"✗ Invalid image source: {source}")
             return None
+
+    @staticmethod
+    def load_images(source):
+        """Universal image loader - handles URLs, file paths, or dialog for multiple images"""
+        images = []
+        if source == '!':
+            filepaths = file_dialogs.open_images_dialog()
+            if filepaths:
+                for filepath in filepaths:
+                    img = ImageHandler.load_from_file(filepath)
+                    if img:
+                        images.append(img)
+        elif ImageHandler.is_image_url(source):
+             img = ImageHandler.load_from_url(source)
+             if img:
+                 images.append(img)
+        elif os.path.exists(source):
+             img = ImageHandler.load_from_file(source)
+             if img:
+                 images.append(img)
+        else:
+            print(f"✗ Invalid image source: {source}")
+        
+        return images
     
     @staticmethod
     def to_base64(image, format='JPEG', quality=85):
