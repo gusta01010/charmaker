@@ -32,6 +32,10 @@ Built with selenium.
 
 The character card will be saved in the set up save folder.
 
+## Branches
+* `main`: Designed to work with known characters with internet information
+* `cftf` (Card for this feeling): Designed to work with **images only**, generating a card of a character based on the image(s) given
+
 ## License
 This project is licensed under the [MIT License](./LICENSE) - see the `LICENSE` file for details.
 
