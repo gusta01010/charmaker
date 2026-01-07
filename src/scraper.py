@@ -258,8 +258,8 @@ def clean_and_format_text(soup):
         """
         # Handle images - extract meaningful alt text
         for img in cell.find_all('img'):
-            alt_text = img.get('alt', '')
-            title_text = img.get('title', '')
+            alt_text = img.get('alt', '').strip()
+            title_text = img.get('title', '').strip()
             
             # Try alt text first, then title
             img_text = alt_text or title_text
@@ -278,18 +278,21 @@ def clean_and_format_text(soup):
         
         # Remove citations and edit links more thoroughly
         for sup in cell.find_all(['sup', 'small']):
-            sup_text = sup.get_text()
-            if re.search(r'edit|```math\d+```|```mathcitation|^```math\w```$', sup_text, re.I):
+            sup_text = sup.get_text().strip()
+            # Remove common citation patterns like [1], [edit], etc.
+            if re.search(r'^\[?\d+\]?$|^\[?edit\]?$|^\[?citation needed\]?$', sup_text, re.I):
+                sup.decompose()
+            elif re.search(r'edit|```math\d+```|```mathcitation|^```math\w```$', sup_text, re.I):
                 sup.decompose()
         
         # Handle links - preserve meaningful ones
         for link in cell.find_all('a'):
-            link_text = link.get_text(strip=True)
+            link_text = link.get_text(separator=' ', strip=True)
             # Remove empty links or edit links
-            if not link_text or re.search(r'^(edit|source|citation)$', link_text, re.I):
+            if not link_text or re.search(r'^(edit|source|citation|\[\d+\])$', link_text, re.I):
                 link.decompose()
             else:
-                # Replace link with its text
+                # Replace link with its text to keep it clean in tables
                 link.replace_with(link_text)
         
         # Handle nested tables (flatten them)
@@ -347,7 +350,7 @@ def clean_and_format_text(soup):
         tag_name = element.name
         
         # Skip empty elements early
-        if not element.get_text(strip=True):
+        if not element.get_text(strip=True) and tag_name not in ['br', 'hr']:
             return ""
         
         # Handle tables with improved logic
@@ -375,16 +378,18 @@ def clean_and_format_text(soup):
                         header_texts.append(header_text)
                 
                 if header_texts:
-                    table_rows.append(" | ".join(header_texts))
-                    table_rows.append("-" * min(len(table_rows[0]), 80))  # Separator line
+                    table_rows.append("| " + " | ".join(header_texts) + " |")
+                    # Markdown table separator
+                    separators = ["---"] * len(header_texts)
+                    table_rows.append("| " + " | ".join(separators) + " |")
             
             # Process data rows
             row_count = 0
             empty_row_count = 0
             
             for row in rows[:100]:  # Limit rows to prevent huge tables
-                # Skip rows that only contain headers
-                if row.find_all('th') and not row.find_all('td'):
+                # Skip rows that only contain headers if we already processed headers
+                if headers and row.find_all('th') and not row.find_all('td'):
                     continue
                     
                 cells = []
@@ -398,7 +403,7 @@ def clean_and_format_text(soup):
                 
                 # Only add rows that have at least one non-empty cell
                 if cell_count > 0:
-                    table_rows.append(" | ".join(cells))
+                    table_rows.append("| " + " | ".join(cells) + " |")
                     row_count += 1
                 else:
                     empty_row_count += 1
@@ -409,7 +414,7 @@ def clean_and_format_text(soup):
             
             # Only return table if it has meaningful content
             if table_rows and row_count > 0:
-                return "\n" + "\n".join(table_rows) + "\n\n"
+                return "\n\n" + "\n".join(table_rows) + "\n\n"
             else:
                 return ""
         
@@ -417,10 +422,10 @@ def clean_and_format_text(soup):
         if tag_name in ['pre', 'code']:
             code_text = element.get_text(strip=False)
             if code_text.strip():
-                if tag_name == 'pre':
-                    return f"\n```\n{code_text}\n```\n"
+                if tag_name == 'pre' or (element.parent and element.parent.name == 'pre'):
+                    return f"\n```\n{code_text.strip()}\n```\n"
                 else:
-                    return f"`{code_text}`"
+                    return f" `{code_text.strip()}` "
             return ""
         
         # Handle blockquotes
@@ -432,8 +437,10 @@ def clean_and_format_text(soup):
                     quote_content.append(child_text)
             
             if quote_content:
-                joined = ' '.join(quote_content)
-                return f"\n> {joined}\n"
+                joined = ' '.join(quote_content).strip()
+                # Add > to each line of the quote
+                quoted = '\n'.join([f"> {line}" for line in joined.split('\n') if line.strip()])
+                return f"\n{quoted}\n"
             return ""
         
         # Process children for other elements
@@ -443,10 +450,10 @@ def clean_and_format_text(soup):
             if child_content:  # Only add non-empty content
                 content.append(child_content)
         
-        if not content:  # Skip if no content after processing
+        if not content and tag_name not in ['br', 'hr']:  # Skip if no content after processing
             return ""
             
-        joined_content = " ".join(content)
+        joined_content = " ".join(content).strip()
         
         # Format based on tag type
         if tag_name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
@@ -454,39 +461,55 @@ def clean_and_format_text(soup):
             # Skip headers that are too short or just numbers
             if len(joined_content) < 2 or re.match(r'^\d+\.?$', joined_content):
                 return ""
-            return f"\n{'#' * level} {joined_content}\n"
+            return f"\n\n{'#' * level} {joined_content}\n\n"
         elif tag_name == 'p':
-            # Skip very short paragraphs that might be captions or labels
-            return f"{joined_content}\n"
-        elif tag_name == 'div': #div newline
-                if len(joined_content) > 2:
-                    return f"{joined_content}\n"
+            return f"\n{joined_content}\n"
+        elif tag_name == 'div':
+            # Only add newlines if it seems like a block element
+            if len(joined_content) > 50 or '\n' in joined_content:
+                return f"\n{joined_content}\n"
+            return joined_content
         elif tag_name == 'li':
             # Check parent to determine list type
             parent = element.find_parent(['ul', 'ol'])
             if parent and parent.name == 'ol':
-                return f"• {joined_content}\n"  # Using bullet for both for consistency
+                # Try to get the index
+                siblings = parent.find_all('li', recursive=False)
+                try:
+                    index = siblings.index(element) + 1
+                    return f"{index}. {joined_content}\n"
+                except ValueError:
+                    return f"1. {joined_content}\n"
             else:
-                return f"• {joined_content}\n"
+                return f"- {joined_content}\n"
         elif tag_name in ['strong', 'b']:
             return f"**{joined_content}**"
         elif tag_name in ['em', 'i']:
             return f"*{joined_content}*"
+        elif tag_name == 'u':
+            return f"<u>{joined_content}</u>"
+        elif tag_name == 's' or tag_name == 'strike' or tag_name == 'del':
+            return f"~~{joined_content}~~"
         elif tag_name == 'a':
             # Include URL for external links
             href = element.get('href', '')
             if href and not href.startswith('#') and not href.startswith('javascript:'):
-                # Only include URL if it's meaningful
-                if len(joined_content) > 2 and not re.match(r'^```math\d+```$', joined_content):
+                # Only include URL if it's meaningful and not a citation
+                if len(joined_content) > 2 and not re.match(r'^\[\d+\]$', joined_content):
+                    # Ensure absolute URL
+                    if href.startswith('//'):
+                        href = 'https:' + href
+                    elif href.startswith('/'):
+                        # We don't have the base URL here easily, but we can try to keep it as is
+                        pass
                     return f"[{joined_content}]({href})"
             return joined_content
         elif tag_name == 'br':
             return "\n"
         elif tag_name == 'hr':
-            return "\n---\n"
+            return "\n\n---\n\n"
         elif tag_name in ['ul', 'ol']:
-            # Lists are handled by their li children
-            return f"\n{joined_content}"
+            return f"\n{joined_content}\n"
         else:
             return joined_content
 
@@ -494,24 +517,30 @@ def clean_and_format_text(soup):
     result = process_element(main_content)
     
     # Clean up the final result
-    # Remove excessive newlines
-    result = re.sub(r'\n{4,}', '\n\n\n', result)
+    # Remove excessive newlines (more than 2)
+    result = re.sub(r'\n{3,}', '\n\n', result)
     
     # Remove empty bullets and list items
-    result = re.sub(r'^[•·]\s*$', '', result, flags=re.MULTILINE)
+    result = re.sub(r'^[•·\-]\s*$', '', result, flags=re.MULTILINE)
     result = re.sub(r'^\d+\.\s*$', '', result, flags=re.MULTILINE)
     
     # Clean up empty headers
     result = re.sub(r'^#+\s*$', '', result, flags=re.MULTILINE)
     
-    # Remove multiple spaces
+    # Remove multiple spaces (but preserve indentation if any, though we don't use it much)
     result = re.sub(r' {2,}', ' ', result)
     
-    # Clean up spacing around headers
-    result = re.sub(r'\n*(#{1,6}[^\n]+)\n*', r'\n\n\1\n\n', result)
+    # Ensure headers have space around them
+    result = re.sub(r'\n*(#{1,6} [^\n]+)\n*', r'\n\n\1\n\n', result)
     
     # Remove trailing whitespace on each line
-    result = re.sub(r' +$', '', result, flags=re.MULTILINE)
+    result = re.sub(r'[ \t]+$', '', result, flags=re.MULTILINE)
+    
+    # Fix spacing around bold/italic
+    result = re.sub(r'\*\* ', '**', result)
+    result = re.sub(r' \*\*', '**', result)
+    result = re.sub(r'\* ', '*', result)
+    result = re.sub(r' \*', '*', result)
     
     # Final cleanup - remove leading/trailing whitespace
     result = result.strip()
@@ -722,7 +751,7 @@ def scrape_with_selenium(urls, use_requests_fallback=True):
         
         # Add content if we got any
         if scraped and formatted_text:
-            all_text += f"\n\n{page_title}\n{'-' * len(page_title)}\n{formatted_text}"
+            all_text += f"\n\n# {page_title}\n\n{formatted_text}\n\n---\n"
             successful_scrapes += 1
             print(f"✓ Successfully scraped: {url}")
         else:
