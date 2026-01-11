@@ -178,12 +178,18 @@ def clean_and_format_text(soup):
     for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
         comment.extract()
     
-    # Remove unwanted elements with expanded list
-    for element in soup(["script", "style", "noscript", "meta", "link", "iframe", "svg", "canvas"]):
+    # Remove unwanted elements
+    for element in soup(["script", "style", "noscript", "meta", "link", "iframe", "svg", "canvas", "textarea", "input", "button", "form"]):
         element.decompose()
+
+    # Specifically remove comment forms or other interaction areas
+    for selector in ["#pcomment-form", ".reply-form", ".comment-form"]:
+        for element in soup.select(selector):
+            element.decompose()
 
     # Enhanced content selectors with priority ordering
     content_selectors = [
+        'body > div.main-container > div.resizable-container > div.page.has-right-rail > main',
         'main', 'article', '[role="main"]', '[role="article"]',  # Semantic HTML5 first
         '#content', '#main-content', '.main-content', '#mw-body', '.content', '.bodyContent',
         '.post-content', '#vector-body', '#mw-content-text', 'div[role="main"]',
@@ -191,150 +197,40 @@ def clean_and_format_text(soup):
         '.article-body', '.post-body', '[itemprop="articleBody"]'
     ]
     
+    # Find first available content area
     main_content = None
-    best_score = 0
-    
-    # Find best content area based on text density
     for selector in content_selectors:
-        candidate = soup.select_one(selector)
-        if candidate:
-            # Calculate content score
-            text_length = len(candidate.get_text(strip=True))
-            html_length = len(str(candidate))
-            if html_length > 0:
-                density = text_length / html_length
-                word_count = len(candidate.get_text().split())
-                
-                # Score based on density and word count
-                score = (density * 100) + (min(word_count, 1000) / 10)
-                
-                if score > best_score:
-                    best_score = score
-                    main_content = candidate
+        main_content = soup.select_one(selector)
+        if main_content:
+            break
 
-    # Fallback to body if no good content area found
-    if not main_content or best_score < 10:
+    # Fallback to body
+    if not main_content:
         main_content = soup.body or soup
 
+    # check if this is the user-specified priority container to allow all content
+    is_priority_container = False
+    priority_selector = 'body > div.main-container > div.resizable-container > div.page.has-right-rail > main'
     if main_content:
-        # Expanded list of unwanted elements and patterns
-        for element in main_content.find_all(['nav', 'footer', 'aside', 'header'], recursive=True):
-            # Check if element contains substantial content before removing
-            text_content = element.get_text(strip=True)
-            word_count = len(text_content.split())
-            if word_count < 50:  # Only remove if it's likely navigation/boilerplate
-                element.decompose()
-        
-        # Enhanced unwanted class patterns
-        unwanted_classes = [
-            'sidebar', 'advertisement', 'ads', 'menu', 'navigation', 'social', 
-            'mw-editsection', 'noprint', 'navbox', 'metadata', 'reference', 
-            'reflist', 'external', 'breadcrumb', 'cookie', 'popup', 'modal',
-            'overlay', 'banner', 'alert', 'notice', 'warning', 'hidden',
-            'offscreen', 'sr-only', 'visually-hidden', 'skip', 'jump'
-        ]
-        
-        for unwanted_class in unwanted_classes:
-            for element in main_content.find_all(class_=re.compile(unwanted_class, re.I)):
-                # Don't remove if it contains substantial content
-                if len(element.get_text(strip=True).split()) < 20:
-                    element.decompose()
-        
-        # Enhanced unwanted ID patterns
-        unwanted_ids = [
-            'sidebar', 'ad-container', 'comments', 'respond', 'footer',
-            'header', 'nav', 'navigation', 'menu', 'search', 'login',
-            'signup', 'newsletter', 'subscription', 'share', 'social'
-        ]
-        
-        for unwanted_id in unwanted_ids:
-            for element in main_content.find_all(id=re.compile(unwanted_id, re.I)):
-                if len(element.get_text(strip=True).split()) < 20:
-                    element.decompose()
+        # check if main_content is or contains the priority content
+        priority_match = soup.select_one(priority_selector)
+        if priority_match and (main_content == priority_match or priority_match in main_content.parents):
+            is_priority_container = True
+
+    if main_content and not is_priority_container:
+        # standard cleaning for other sites
+        for element in main_content.find_all(['nav', 'footer', 'aside', 'header', 'script', 'style']):
+            element.decompose()
 
     def clean_cell_text(cell):
-        """
-        Clean text from a table cell, handling common issues.
-        """
-        # Handle images - extract meaningful alt text
-        for img in cell.find_all('img'):
-            alt_text = img.get('alt', '').strip()
-            title_text = img.get('title', '').strip()
-            
-            # Try alt text first, then title
-            img_text = alt_text or title_text
-            
-            if img_text and not re.search(r'\.(png|jpg|jpeg|gif|svg|webp)$', img_text, re.I):
-                # Clean common patterns
-                clean_text = re.sub(r'\s*(Icon|Logo|Image|Photo|Picture)\.?\s*$', '', img_text, flags=re.I)
-                clean_text = re.sub(r'^\s*(Icon|Logo|Image|Photo|Picture)\s*[:|-]?\s*', '', clean_text, flags=re.I)
-                
-                if clean_text and len(clean_text) > 1:
-                    img.replace_with(f"[{clean_text}]")
-                else:
-                    img.decompose()
-            else:
-                img.decompose()
+        """Clean text from a table cell."""
+        # remove images and citations
+        for element in cell.find_all(['img', 'sup', 'small']):
+            element.decompose()
         
-        # Remove citations and edit links more thoroughly
-        for sup in cell.find_all(['sup', 'small']):
-            sup_text = sup.get_text().strip()
-            # Remove common citation patterns like [1], [edit], etc.
-            if re.search(r'^\[?\d+\]?$|^\[?edit\]?$|^\[?citation needed\]?$', sup_text, re.I):
-                sup.decompose()
-            elif re.search(r'edit|```math\d+```|```mathcitation|^```math\w```$', sup_text, re.I):
-                sup.decompose()
-        
-        # Handle links - preserve meaningful ones
-        for link in cell.find_all('a'):
-            link_text = link.get_text(separator=' ', strip=True)
-            # Remove empty links or edit links
-            if not link_text or re.search(r'^(edit|source|citation|\[\d+\])$', link_text, re.I):
-                link.decompose()
-            else:
-                # Replace link with its text to keep it clean in tables
-                link.replace_with(link_text)
-        
-        # Handle nested tables (flatten them)
-        for nested_table in cell.find_all('table'):
-            nested_rows = []
-            for row in nested_table.find_all('tr'):
-                nested_cells = [clean_cell_text(c) for c in row.find_all(['td', 'th'])]
-                if any(nested_cells):
-                    nested_rows.append(' / '.join(filter(None, nested_cells)))
-            
-            if nested_rows:
-                nested_table.replace_with(' | '.join(nested_rows))
-            else:
-                nested_table.decompose()
-        
-        # Handle lists in cells
-        lists_text = []
-        for list_elem in cell.find_all(['ul', 'ol']):
-            items = [li.get_text(strip=True) for li in list_elem.find_all('li')]
-            if items:
-                lists_text.append(', '.join(items))
-                list_elem.extract()
-        
-        # Get clean text
+        # get clean text
         text = cell.get_text(separator=' ', strip=True)
-        
-        # Add lists text if any
-        if lists_text:
-            text = text + ' ' + ' '.join(lists_text) if text else ' '.join(lists_text)
-        
-        # Clean up whitespace and unwanted patterns
-        text = re.sub(r'\s+', ' ', text)
-        text = re.sub(r'KATEX_INLINE_OPEN\s*edit\s*(?:stats?)?\s*KATEX_INLINE_CLOSE', '', text, flags=re.I)
-        text = re.sub(r'```math\s*(?:edit|citation needed|dubious|clarification needed)\s*```', '', text, flags=re.I)
-        text = re.sub(r'^\s*[·•]\s*', '', text)  # Remove bullet points
-        text = re.sub(r'\s*\|\s*$', '', text)  # Remove trailing pipes
-        
-        # Return empty string for cells with only whitespace or special chars
-        if re.match(r'^[\s\-–—·•|]*$', text):
-            return ""
-        
-        return text.strip()
+        return re.sub(r'\s+', ' ', text).strip()
 
     def process_element(element):
         if isinstance(element, NavigableString):
@@ -491,23 +387,14 @@ def clean_and_format_text(soup):
         elif tag_name == 's' or tag_name == 'strike' or tag_name == 'del':
             return f"~~{joined_content}~~"
         elif tag_name == 'a':
-            # Include URL for external links
-            href = element.get('href', '')
-            if href and not href.startswith('#') and not href.startswith('javascript:'):
-                # Only include URL if it's meaningful and not a citation
-                if len(joined_content) > 2 and not re.match(r'^\[\d+\]$', joined_content):
-                    # Ensure absolute URL
-                    if href.startswith('//'):
-                        href = 'https:' + href
-                    elif href.startswith('/'):
-                        # We don't have the base URL here easily, but we can try to keep it as is
-                        pass
-                    return f"[{joined_content}]({href})"
-            return joined_content
+            # User wants to avoid the URL part, just keep the text in brackets
+            if not joined_content or not joined_content.strip():
+                return ""
+            return f"[{joined_content}]"
         elif tag_name == 'br':
             return "\n"
         elif tag_name == 'hr':
-            return "\n\n---\n\n"
+            return "\n---\n"
         elif tag_name in ['ul', 'ol']:
             return f"\n{joined_content}\n"
         else:
@@ -517,7 +404,7 @@ def clean_and_format_text(soup):
     result = process_element(main_content)
     
     # Clean up the final result
-    # Remove excessive newlines (more than 2)
+    # Remove excessive newlines (strictly more than 1 blank line)
     result = re.sub(r'\n{3,}', '\n\n', result)
     
     # Remove empty bullets and list items
@@ -529,9 +416,9 @@ def clean_and_format_text(soup):
     
     # Remove multiple spaces (but preserve indentation if any, though we don't use it much)
     result = re.sub(r' {2,}', ' ', result)
-    
-    # Ensure headers have space around them
-    result = re.sub(r'\n*(#{1,6} [^\n]+)\n*', r'\n\n\1\n\n', result)
+
+    # Remove empty brackets [ ], [  ] or similar artifacts
+    result = re.sub(r'\[\s*\]', '', result)
     
     # Remove trailing whitespace on each line
     result = re.sub(r'[ \t]+$', '', result, flags=re.MULTILINE)
@@ -673,6 +560,7 @@ def scrape_with_selenium(urls, use_requests_fallback=True):
                     
                     # Then wait for common content containers
                     content_selectors = [
+                        (By.CSS_SELECTOR, "body > div.main-container > div.resizable-container > div.page.has-right-rail > main"),
                         (By.CSS_SELECTOR, "main, article, #content, .content, #main"),
                         (By.CSS_SELECTOR, "p"),  # At least some paragraphs
                     ]
@@ -751,7 +639,7 @@ def scrape_with_selenium(urls, use_requests_fallback=True):
         
         # Add content if we got any
         if scraped and formatted_text:
-            all_text += f"\n\n# {page_title}\n\n{formatted_text}\n\n---\n"
+            all_text += f"\n# {page_title}\n{formatted_text}\n"
             successful_scrapes += 1
             print(f"✓ Successfully scraped: {url}")
         else:

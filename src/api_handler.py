@@ -42,11 +42,11 @@ Your response MUST follow this EXACT format, with each key on a new line. Do not
 
 NAME: [The character's full name, including any titles, aliases, nicknames, or alternate identities]
 
-DESCRIPTION: [This is the CORE section - an exhaustive, unfiltered, and completely detailed account (3,000-6,000 tokens). Write in rich, visceral, and descriptive prose. Perform a dynamic synthesis of all available data, weaving every aspect of their existence into a continuous, immersive narrative that explores their information and its world in profound depth.
+DESCRIPTION: [An identically accurate, unfiltered, and completely detailed account (3.000-6.000 tokens). Write in rich, full, and descriptive way. Perform a dynamic synthesis of all available data, weaving every aspect of their existence into a continuous, immersive narrative that explores their information and its world in profound depth.
 
 BACKGROUND & HISTORY: Chronicle their entire life story, origins, upbringing, family history, significant life events, traumas, achievements, and failures. Detail how these shaped their current worldview and the rest.
 
-PHYSICAL APPEARANCE: Provide meticulous detail about every aspect of their physical form, inspecting every inch of the character. Describe their overall build, physique, and conditioning alongside precise height, weight, and body measurements. Detail facial features like bone structure, jawline, forehead, and skin texture. Elaborate on their eyes, including color, shape, size, and unique characteristics like scars or heterochromia. Describe their hair's color, length, texture, style, and grooming habits. Cover their skin tone, texture, and any marks, scars, birthmarks, or tattoos with detail on placement, size, and meaning. Discuss body composition, including muscle definition, fat distribution, and proportions. Include intimate physical details such as chest or breast size and shape, hip measurements, body hair patterns, and genital characteristics, being explicit and authentic to the character's lore. Describe their hands, feet, nails, and movement patterns like gait, gestures, and posture. Finally, capture their voice's pitch, tone, accent, speech patterns, and volume, as well as their natural scent and preferred perfumes or colognes.
+PHYSICAL APPEARANCE: Provide meticulous detail about every aspect of their physical form, inspecting every inch of it. Describe their overall build, physique explicitly, and conditioning alongside precise height, weight, and body measurements. Detail facial features like bone structure, jawline, forehead, and skin texture. Elaborate on their eyes, including color, shape, size, and unique characteristics like scars or heterochromia. Describe their hair's color, length, texture, style, and grooming habits. Cover their skin tone, texture, and any marks, scars, birthmarks, or tattoos with detail on placement, size, and meaning. Discuss body composition, including muscle definition, fat distribution, and proportions. Include intimate physical details such as chest or breast size and shape, hip measurements, body hair patterns, and genital characteristics, being explicit and authentic to the character's lore. Describe their hands, feet, nails, and movement patterns like gait, gestures, and posture. If (and ONLY if) mentioned in sources or logically implied by their environment/nature, briefly mention their voice and scent—DO NOT use cliched metaphors like 'ozone' or 'metallic tang' AI-isms unless they are canon.
 
 CLOTHING & STYLE: Detail their complete wardrobe, from signature outfits to accessories, footwear, and undergarments. Explain how their style reflects their personality, based on images and descriptions given carefully.
 
@@ -54,7 +54,7 @@ PERSONALITY: Deep psychological profile including core traits, MBTI/Enneagram (i
 
 RELATIONSHIPS: Comprehensive mapping of family, romantic history, friendships, enemies, and professional dynamics. Detail their attachment style and how they treat others along with others.
 
-SEXUALITY & INTIMATE TRAITS: [When applicable] Sexual orientation, experience level, turn-ons, kinks, fetishes (be specific and explicit), turn-offs, boundaries, and behavioral patterns during intimacy. Include dirty talk style, aftercare preferences and others...
+SEXUALITY & INTIMATE TRAITS: [When applicable] Sexual orientation, experience level, turn-ons, kinks, fetishes (be specific and explicit), turn-offs, boundaries, and behavioral patterns during intimacy. Include dirty talk style and preferences, avoiding generic purple prose.
 
 SKILLS & ABILITIES: Combat skills, magical/supernatural abilities (with mechanics), professional expertise, hobbies, and languages et al.
 
@@ -77,14 +77,14 @@ SCENARIO: [Describe in 3-5 paragraphs the specific circumstances, setting, and c
 
 GREETING_MESSAGE: [Craft an engaging, immersive opening scene of 3-5 paragraphs. Spoken dialogue must be in "quotation marks" while actions, thoughts, and descriptions must be in *asterisks*. Use line breaks between beats and develop narrative tones such as LOUD VOICE or marks like ~, ♥, ☆, ♪, !!, ?!?, ?? when they match the character's speech style. Write in third person perspective focusing on {{char}}'s POV, using sensory details to show rather than tell. End with a hook that invites {{user}} interaction.]
 
-EXAMPLE_MESSAGES: [Create 4-6 example exchanges demonstrating {{char}}'s voice and personality.
+EXAMPLE_MESSAGES: [Create 1-4 example exchanges demonstrating {{char}}'s voice and personality.
 FORMAT:
 <START>
 {{user}}: [Input]
 {{char}}: *[Action]* "Dialogue" *[Action]*
 ]
 
-CRITICAL WRITING GUIDELINES: Use unfiltered, raw, and authentic language where it serves the character's truth without sanitization. Show rather than tell by describing physical reactions instead of just stating emotions. Ensure every detail is grounded in the provided sources for lore accuracy. Write with human-like prose, maintaining rhythm, flow, and emotional weight while avoiding repetitive sentence structures. Perform dynamic information synthesis: if a detail is mentioned once or implied in an image, it must be captured and expanded upon factually.
+CRITICAL WRITING GUIDELINES: Use authentic language where it serves the character's truth without sanitization. Show rather than tell by describing physical reactions instead of just stating emotions. Ensure every detail is grounded in the provided sources for lore accuracy. Write with character's matching tone accurately, maintaining rhythm, flow, and emotional weight while avoiding repetitive sentence structures. Perform dynamic information synthesis: if a detail is mentioned once or implied in an image, it must be captured and expanded upon factually.
 """
 
 
@@ -119,7 +119,7 @@ CRITICAL WRITING GUIDELINES: Use unfiltered, raw, and authentic language where i
                     messages.append({"role": "system", "content": part.strip()})
         else:
             # Combine all system content into one message (recommended for OpenRouter)
-            combined_system = "\n\n".join(filter(None, [part.strip() for part in system_parts]))
+            combined_system = "\n".join(filter(None, [part.strip() for part in system_parts]))
             if combined_system:
                 messages.append({"role": "system", "content": combined_system})
         
