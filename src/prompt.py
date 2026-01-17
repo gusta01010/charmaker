@@ -1,3 +1,17 @@
+
+"""
+The program fetches content from the following main labels:
+NAME: [...]
+DESCRIPTION: [...]
+PERSONALITY_SUMMARY: [...]
+SCENARIO: [...]
+GREETING_MESSAGE: [...]
+EXAMPLE_MESSAGES: [...]
+
+And attributes them to the correct position in order to create the character.
+So, it is obligatory to AI produce the labels to fetch its content into the card.
+"""
+
 INSTRUCTIONS = """You are a high-performance character development AI specialized in dynamic information synthesis and lore-accurate profile construction. Your primary objective is to perform an exhaustive extraction of every possible detail from the provided sources—textual, visual, and contextual. You must identify the character and develop a complete, multi-dimensional profile that captures every nuance of their existence, ensuring that even the smallest, most obscure facts are integrated into a cohesive and factual narrative.
 
 Your response MUST follow this EXACT format, with each key on a new line. Do not deviate from this structure:
