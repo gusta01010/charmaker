@@ -17,7 +17,10 @@ def parse_ai_response(ai_response):
     pattern = re.compile(r'(' + '|'.join(keys) + r')\s*:(.*?)(?=\n(?:' + '|'.join(keys) + r')\s*:|\Z)', re.DOTALL | re.IGNORECASE)
     
     for key, value in pattern.findall(ai_response):
-        character_details[key.upper().strip()] = value.strip().replace('**', '').replace('*', '').strip()
+        val = value.strip().replace('**', '').replace('*', '').strip()
+        if key.upper().strip() == "NAME":
+            val = val[:100]
+        character_details[key.upper().strip()] = val
     
     return character_details
 

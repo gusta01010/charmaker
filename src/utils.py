@@ -1,7 +1,18 @@
 import json
 import base64
+import re
+import os
 from PIL import Image
 import piexif
+
+def sanitize_filename(name):
+    """Takes a string and returns a valid filename."""
+    if not name:
+        return "unnamed_character"
+    name = name.strip().replace('**', '').replace('*', '')
+    name = re.sub(r'[<>:"/\\|?*]', '', name)
+    name = re.sub(r'\s+', '_', name)
+    return name[:100]
 
 def save_character_card(character_data, image_path, save_location):
     """
@@ -13,9 +24,10 @@ def save_character_card(character_data, image_path, save_location):
         save_location (str): The directory to save the new image in.
     """
     try:
+        char_name = character_data.get("NAME", "character")[:100]
         # Construct the detailed character card structure
         card = {
-            "name": character_data.get("NAME", ""),
+            "name": char_name,
             "description": character_data.get("DESCRIPTION", ""),
             "personality": character_data.get("PERSONALITY_SUMMARY", ""),
             "scenario": character_data.get("SCENARIO", ""),
@@ -29,7 +41,7 @@ def save_character_card(character_data, image_path, save_location):
             "spec": "chara_card_v2",
             "spec_version": "2.0",
             "data": {
-                "name": character_data.get("NAME", ""),
+                "name": char_name,
                 "description": character_data.get("DESCRIPTION", ""),
                 "personality": character_data.get("PERSONALITY_SUMMARY", ""),
                 "scenario": character_data.get("SCENARIO", ""),
@@ -67,7 +79,8 @@ def save_character_card(character_data, image_path, save_location):
         exif_bytes = piexif.dump(exif_dict)
         
         # Save the new image
-        output_path = f"{save_location}/{character_data.get('NAME', 'character')}.png"
+        clean_name = sanitize_filename(char_name)
+        output_path = os.path.join(save_location, f"{clean_name}.png")
         img.save(output_path, "png", exif=exif_bytes)
         print(f"Character card saved to {output_path}")
 
@@ -83,7 +96,9 @@ def save_as_json(character_data, save_location):
         save_location (str): The directory to save the JSON file in.
     """
     try:
-        file_path = f"{save_location}/{character_data.get('NAME', 'character')}.json"
+        char_name = character_data.get("NAME", "character")[:100]
+        clean_name = sanitize_filename(char_name)
+        file_path = os.path.join(save_location, f"{clean_name}.json")
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(character_data, f, indent=4)
         print(f"Character data saved to {file_path}")

@@ -17,9 +17,10 @@ def sanitize_filename(name):
 def save_character_card(character_data, image_path, save_location):
     """Saves character data to a tEXt chunk in a PNG image using V3 format."""
     try:
+        char_name = character_data.get("NAME", "")[:100]
         card = {
             "data": {
-                "name": character_data.get("NAME", ""),
+                "name": char_name,
                 "description": character_data.get("DESCRIPTION", ""),
                 "personality": character_data.get("PERSONALITY_SUMMARY", ""),
                 "first_mes": character_data.get("GREETING_MESSAGE", ""),
@@ -48,7 +49,7 @@ def save_character_card(character_data, image_path, save_location):
             "spec": "chara_card_v3",
             "spec_version": "3.0",
             # these are duplicated at the root level for compatibility
-            "name": character_data.get("NAME", ""),
+            "name": char_name,
             "fav": False,
             "description": character_data.get("DESCRIPTION", ""),
             "personality": character_data.get("PERSONALITY_SUMMARY", ""),
@@ -64,7 +65,7 @@ def save_character_card(character_data, image_path, save_location):
         metadata = PngInfo()
         metadata.add_text("chara", chara_data_base64)
         
-        clean_name = sanitize_filename(character_data.get('NAME'))
+        clean_name = sanitize_filename(char_name)
         output_path = os.path.join(save_location, f"{clean_name}.png")
 
         img.save(output_path, "png", pnginfo=metadata)

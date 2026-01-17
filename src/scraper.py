@@ -64,7 +64,6 @@ def create_session_with_retries(retries=3, backoff_factor=0.5, verify_ssl=True):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
         'DNT': '1',
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
@@ -442,7 +441,7 @@ def clean_and_format_text(soup):
 def scrape_with_requests(url, verify_ssl=True):
     """
     Scrape a single URL using requests library.
-    Returns (content, success) tuple.
+    Returns (content, title, success) tuple.
     """
     try:
         session = create_session_with_retries(retries=3, verify_ssl=verify_ssl)
@@ -452,22 +451,30 @@ def scrape_with_requests(url, verify_ssl=True):
         # Check if we got actual HTML content
         content_type = response.headers.get('content-type', '').lower()
         if 'text/html' not in content_type and 'text/plain' not in content_type:
-            return None, False
+            return None, None, False
         
-        soup = BeautifulSoup(response.text, 'html.parser')
+        # use content (bytes) instead of text to let BeautifulSoup handle encoding detection
+        # this is especially important for sites with non-UTF-8 encodings (like Shift-JIS)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Extract title
+        page_title = "Untitled Page"
+        if soup.title and soup.title.string:
+            page_title = soup.title.string.strip()
+        
         formatted_text = clean_and_format_text(soup)
         
         if formatted_text and len(formatted_text.strip()) > 50:
-            return formatted_text, True
-        return None, False
+            return formatted_text, page_title, True
+        return None, None, False
         
     except (requests.exceptions.SSLError, ssl.SSLError) as e:
         if verify_ssl:
             # Retry without SSL verification
             return scrape_with_requests(url, verify_ssl=False)
-        return None, False
+        return None, None, False
     except Exception as e:
-        return None, False
+        return None, None, False
     
 
 def scrape_with_selenium(urls, use_requests_fallback=True):
@@ -621,20 +628,11 @@ def scrape_with_selenium(urls, use_requests_fallback=True):
         # fallback to requests if Selenium failed or wasn't available
         if not scraped and use_requests_fallback:
             print(f"  → Trying requests-based scraping for {url}...")
-            content, success = scrape_with_requests(url)
+            content, req_title, success = scrape_with_requests(url)
             if success and content:
                 formatted_text = content
+                page_title = req_title
                 scraped = True
-                # try to get title from the content
-                try:
-                    session = create_session_with_retries(verify_ssl=False)
-                    resp = session.get(url, timeout=15, verify=False)
-                    soup = BeautifulSoup(resp.text, 'html.parser')
-                    title_tag = soup.find('title')
-                    if title_tag:
-                        page_title = title_tag.get_text(strip=True)
-                except:
-                    pass
                 print(f"  ✓ Requests fallback successful")
         
         # Add content if we got any
