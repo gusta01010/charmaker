@@ -1,8 +1,43 @@
 import requests
 import json
 import os
+import sys
+import importlib.util
 from image_handler import ImageHandler
-from prompt import INSTRUCTIONS
+
+def load_instructions():
+    """
+    loads INSTRUCTIONS from an external prompt.py file if it exists 
+    next to the executable/script, otherwise falls back to internal version.
+    """
+    # get the directory where the EXE (if frozen) or script is located
+    if getattr(sys, 'frozen', False):
+        base_path = os.path.dirname(sys.executable)
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    
+    prompt_path = os.path.join(base_path, 'prompt.py')
+    
+    # Try to load from the external file if it exists
+    if os.path.exists(prompt_path):
+        try:
+            # use importlib to dynamically load the python file as a module
+            spec = importlib.util.spec_from_file_location("prompt_external", prompt_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            if hasattr(module, 'INSTRUCTIONS'):
+                return module.INSTRUCTIONS
+        except Exception as e:
+            print(f" Warning: Found external prompt.py but failed to load it: {e}")
+            print("  Falling back to internal prompt...")
+    
+    # fallback to internal prompt
+    try:
+        from prompt import INSTRUCTIONS
+        return INSTRUCTIONS
+    except ImportError:
+        return "Error: Could not find character generation instructions."
+
 try:
     from google import generativeai as genai
 except ImportError:
@@ -11,7 +46,7 @@ except ImportError:
 class APIHandler:
     """Handles all API communications for different providers"""
     
-    INSTRUCTIONS = INSTRUCTIONS
+    INSTRUCTIONS = load_instructions()
 
     @staticmethod
     def call_openai_style(config, system_parts, instructions, image_object):
