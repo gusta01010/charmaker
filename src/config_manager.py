@@ -1,7 +1,7 @@
 import json
 import os
 
-CONFIG_FILE = 'config.json'
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 DEFAULT_CONFIG = {
     "save_location": "saved_characters",
     "api_provider": "groq",
@@ -9,6 +9,10 @@ DEFAULT_CONFIG = {
     "openrouter_api_key": "YOUR_OPENROUTER_API_KEY_HERE",
     "gemini_api_key": "YOUR_GEMINI_API_KEY_HERE",
     "separate_system_messages": False,
+    "browser_config": {
+        "browser_type": None,
+        "binary_path": None
+    },
     # Provider-specific model configurations
     "provider_models": {
         "groq": "llama-3.1-70b-versatile",
