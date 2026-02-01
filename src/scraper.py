@@ -7,14 +7,19 @@ import requests
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup, NavigableString, Tag, Comment
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.edge.service import Service as EdgeService
 from selenium.webdriver.edge.options import Options as EdgeOptions
+from selenium.webdriver.firefox.service import Service as FirefoxService
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import config_manager
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -484,65 +489,123 @@ def scrape_with_selenium(urls, use_requests_fallback=True):
         return ""
     
     all_text = ""
-    print("Setting up Edge driver...")
-    edge_options = EdgeOptions()
-    
-    # Anti-detection settings
-    edge_options.add_argument('--disable-blink-features=AutomationControlled')
-    edge_options.add_experimental_option('useAutomationExtension', False)
-    
-    # User agent
-    edge_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0')
-    
-    # SSL/TLS and security settings
-    edge_options.add_argument('--disable-web-security')
-    edge_options.add_argument('--allow-running-insecure-content')
-    edge_options.add_argument('--ignore-certificate-errors')
-    edge_options.add_argument('--ignore-ssl-errors')
-    edge_options.add_argument('--ignore-certificate-errors-spki-list')
-    edge_options.add_argument('--disable-features=IsolateOrigins,site-per-process')
-    
-    # Performance and stability
-    edge_options.add_argument('--disable-extensions')
-    edge_options.add_argument('--disable-gpu')
-    edge_options.add_argument('--no-sandbox')
-    edge_options.add_argument('--disable-dev-shm-usage')
-    edge_options.add_argument('--disable-setuid-sandbox')
-    edge_options.add_argument('--headless=new')  # Use new headless mode
-    
-    # Memory optimization
-    edge_options.add_argument('--disable-software-rasterizer')
-    edge_options.add_argument('--disable-background-timer-throttling')
-    edge_options.add_argument('--disable-backgrounding-occluded-windows')
-    edge_options.add_argument('--disable-renderer-backgrounding')
-    
-    # Suppress console noise
-    edge_options.add_argument('--log-level=3')  # Only fatal errors
-    edge_options.add_argument('--silent')
-    edge_options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
-    
-    # Window size for proper rendering
-    edge_options.add_argument('--window-size=1920,1080')
-    
     driver = None
-    driver_failed = False
     
-    try:
-        # Suppress Edge driver stderr output (GPU errors, etc.)
-        service = EdgeService(
-            executable_path=r"..\\msedgedriver.exe",
-            log_output=os.devnull
-        )
-        driver = webdriver.Edge(service=service, options=edge_options)
-        
-        # Set page load timeout
-        driver.set_page_load_timeout(60)
-        driver.implicitly_wait(10)
-        
-    except Exception as e:
-        print(f"⚠ Driver initialization warning: {e}")
-        print("Will use requests-based scraping as fallback.")
-        driver_failed = True
+    # Load configuration
+    config = config_manager.load_config()
+    browser_cfg = config.get("browser_config", {})
+    saved_name = browser_cfg.get("browser_name")
+    saved_type = browser_cfg.get("browser_type")
+    saved_binary = browser_cfg.get("binary_path")
+
+    def get_common_chrome_options(is_edge=False):
+        options = EdgeOptions() if is_edge else ChromeOptions()
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_experimental_option('useAutomationExtension', False)
+        options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        options.add_argument('--disable-web-security')
+        options.add_argument('--allow-running-insecure-content')
+        options.add_argument('--ignore-certificate-errors')
+        options.add_argument('--ignore-ssl-errors')
+        options.add_argument('--ignore-certificate-errors-spki-list')
+        options.add_argument('--disable-features=IsolateOrigins,site-per-process')
+        options.add_argument('--disable-extensions')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-setuid-sandbox')
+        options.add_argument('--headless=new')
+        options.add_argument('--disable-software-rasterizer')
+        options.add_argument('--disable-background-timer-throttling')
+        options.add_argument('--disable-backgrounding-occluded-windows')
+        options.add_argument('--disable-renderer-backgrounding')
+        options.add_argument('--log-level=3')
+        options.add_argument('--silent')
+        options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
+        options.add_argument('--window-size=1920,1080')
+        return options
+
+    # Try different browsers in order of preference
+    browsers_to_try = [
+        ("Brave", "chrome"),
+        ("Chrome", "chrome"),
+        ("Edge", "edge"),
+        ("Firefox", "firefox")
+    ]
+
+    # If we have a saved config, move it to the front
+    if saved_name and saved_type:
+        # remove it from the list first
+        browsers_to_try = [b for b in browsers_to_try if b[0] != saved_name]
+        # insert it at the beginning
+        browsers_to_try.insert(0, (saved_name, saved_type))
+
+    for browser_name, browser_type in browsers_to_try:
+        try:
+            if browser_type == "chrome":
+                options = get_common_chrome_options(is_edge=False)
+                
+                # Use saved binary if it matches the browser we are trying
+                if browser_name == saved_name and saved_binary and os.path.exists(saved_binary):
+                    options.binary_location = saved_binary
+                elif browser_name == "Brave":
+                    brave_paths = [
+                        os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'), 'BraveSoftware\\Brave-Browser\\Application\\brave.exe'),
+                        os.path.join(os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)'), 'BraveSoftware\\Brave-Browser\\Application\\brave.exe'),
+                        os.path.join(os.environ.get('LOCALAPPDATA', ''), 'BraveSoftware\\Brave-Browser\\Application\\brave.exe'),
+                    ]
+                    for path in brave_paths:
+                        if os.path.exists(path):
+                            options.binary_location = path
+                            break
+                    else:
+                        continue # Skip Brave if binary not found
+                
+                print(f"Attempting to set up {browser_name} driver...")
+                service = ChromeService(executable_path=r"..\\chromedriver.exe", log_output=os.devnull)
+                driver = webdriver.Chrome(service=service, options=options)
+                
+            elif browser_type == "edge":
+                print("Attempting to set up Edge driver...")
+                options = get_common_chrome_options(is_edge=True)
+                if browser_name == saved_name and saved_binary and os.path.exists(saved_binary):
+                    options.binary_location = saved_binary
+                service = EdgeService(executable_path=r"..\\msedgedriver.exe", log_output=os.devnull)
+                driver = webdriver.Edge(service=service, options=options)
+                
+            elif browser_type == "firefox":
+                print("Attempting to set up Firefox driver...")
+                options = FirefoxOptions()
+                options.add_argument('--headless')
+                service = FirefoxService(executable_path=r"..\\geckodriver.exe", log_output=os.devnull)
+                driver = webdriver.Firefox(service=service, options=options)
+
+            if driver:
+                print(f"✓ {browser_name} driver initialized successfully")
+                
+                # Save configuration if it changed or was empty
+                if browser_name != saved_name:
+                    binary_path = getattr(options, 'binary_location', None)
+                    config["browser_config"] = {
+                        "browser_name": browser_name,
+                        "browser_type": browser_type,
+                        "binary_path": binary_path
+                    }
+                    config_manager.save_config(config)
+                    print(f"  → Saved {browser_name} as preferred browser in config.json")
+                
+                driver.set_page_load_timeout(60)
+                driver.implicitly_wait(10)
+                break
+                
+        except Exception as e:
+            # print(f"  ✗ {browser_name} initialization failed: {e}") 
+            driver = None
+            continue
+
+    driver_failed = driver is None
+    if driver_failed:
+        print("⚠ All browser drivers failed to initialize. Will use requests-based scraping as fallback.")
     
     successful_scrapes = 0
     total_urls = len(urls)
