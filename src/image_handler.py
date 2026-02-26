@@ -11,7 +11,7 @@ class ImageHandler:
     """Handles image loading, processing, and validation"""
     
     SUPPORTED_FORMATS = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'}
-    MAX_SIZE_MB = 10
+    MAX_SIZE_MB = 11
     
     @staticmethod
     def is_image_url(url):

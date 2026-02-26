@@ -4,14 +4,11 @@ import ssl
 import os
 import urllib3
 import requests
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup, NavigableString, Tag, Comment
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.webdriver.edge.service import Service as EdgeService
 from selenium.webdriver.edge.options import Options as EdgeOptions
-from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -19,14 +16,22 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import config_manager
+
+# Assuming config_manager is a local module in your project
+try:
+    import config_manager
+except ImportError:
+    # Mock fallback just in case it's missing in some environments
+    class _MockConfig:
+        def load_config(self): return {}
+        def save_config(self, cfg): pass
+    config_manager = _MockConfig()
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class TLSAdapter(HTTPAdapter):
-    """Custom adapter to handle various TLS/SSL configurations."""
-    
+    """Custom adapter to handle various TLS/SSL configurations robustly."""
     def __init__(self, ssl_context=None, **kwargs):
         self.ssl_context = ssl_context
         super().__init__(**kwargs)
@@ -38,10 +43,9 @@ class TLSAdapter(HTTPAdapter):
 
 
 def create_session_with_retries(retries=3, backoff_factor=0.5, verify_ssl=True):
-    """Create a requests session with retry logic and SSL handling."""
+    """Create a highly robust requests session with modern anti-bot headers and SSL fallbacks."""
     session = requests.Session()
     
-    # Configure retry strategy
     retry_strategy = Retry(
         total=retries,
         backoff_factor=backoff_factor,
@@ -49,13 +53,10 @@ def create_session_with_retries(retries=3, backoff_factor=0.5, verify_ssl=True):
         allowed_methods=["HEAD", "GET", "OPTIONS"]
     )
     
-    # try with different SSL contexts if needed
     if not verify_ssl:
-        # creates a permissive SSL context
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
-        # also try with older TLS versions for legacy sites
         ssl_context.set_ciphers('DEFAULT:@SECLEVEL=1')
         adapter = TLSAdapter(ssl_context=ssl_context, max_retries=retry_strategy)
     else:
@@ -64,89 +65,84 @@ def create_session_with_retries(retries=3, backoff_factor=0.5, verify_ssl=True):
     session.mount("https://", adapter)
     session.mount("http://", adapter)
     
-    # set common headers to avoid blocks
+    # Modernized headers to mimic a real Chromium browser and bypass basic WAFs
     session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
         'DNT': '1',
         'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
     })
     
     return session
 
+
 def is_valid_url_format(url):
-    """Quick URL format validation - lightweight check for basic structure"""
+    """Quick URL format validation."""
     try:
         parsed = urlparse(url)
-        # Check if it has scheme and netloc, and netloc contains at least a dot
-        return (parsed.scheme in ['http', 'https'] and 
-                parsed.netloc and 
-                '.' in parsed.netloc and
-                len(parsed.netloc.split('.')) >= 2)
-    except:
+        return bool(parsed.scheme in ['http', 'https'] and parsed.netloc and '.' in parsed.netloc)
+    except Exception:
         return False
 
+
 def is_valid_url(url):
-    """Check if URL is valid and accessible with network request."""
+    """Check if URL is accessible, handling SSL and timeouts intelligently."""
+    if not is_valid_url_format(url):
+        return False, "Invalid URL format"
+        
     try:
-        # Parse URL
-        parsed = urlparse(url)
-        if not parsed.scheme or not parsed.netloc:
-            return False, "Invalid URL format"
+        session = create_session_with_retries(retries=1, verify_ssl=True)
+        response = session.head(url, timeout=10, allow_redirects=True)
         
-        # Create session with retries and SSL handling
-        session = create_session_with_retries(retries=2, verify_ssl=True)
+        if response.status_code >= 400:
+            return False, f"HTTP {response.status_code} error"
+        return True, "Valid"
         
+    except (requests.exceptions.SSLError, ssl.SSLError):
         try:
-            # quick HEAD request to check if URL is accessible
-            response = session.head(url, timeout=15, allow_redirects=True)
-            if response.status_code >= 400:
-                return False, f"HTTP {response.status_code} error"
-            return True, "Valid"
-        except (requests.exceptions.SSLError, ssl.SSLError):
-            # Retry without SSL verification
-            session = create_session_with_retries(retries=2, verify_ssl=False)
-            response = session.head(url, timeout=15, allow_redirects=True, verify=False)
+            session = create_session_with_retries(retries=1, verify_ssl=False)
+            response = session.head(url, timeout=10, allow_redirects=True, verify=False)
             if response.status_code >= 400:
                 return False, f"HTTP {response.status_code} error"
             return True, "Valid (SSL bypassed)"
-    
-    except requests.exceptions.ConnectionError as e:
-        error_msg = str(e).lower()
-        if 'handshake' in error_msg or 'ssl' in error_msg or 'certificate' in error_msg:
-            return False, "SSL/TLS handshake failed - will try with Selenium"
-        return False, "Connection failed - site may be down"
+        except Exception as e:
+            return False, f"SSL bypass failed: {e}"
+            
+    except requests.exceptions.ConnectionError:
+        return False, "Connection failed - site may be down or requires Javascript/Browser"
     except requests.exceptions.Timeout:
-        return False, "Connection timeout - will try with Selenium"
-    except requests.exceptions.InvalidURL:
-        return False, "Malformed URL"
+        return False, "Connection timeout - will require Browser rendering"
     except Exception as e:
         return False, f"Error: {str(e)}"
 
+
 def get_urls():
-    """Get URLs from user input with validation."""
+    """Interactive URL gatherer."""
     urls = []
     print("Enter URLs to scrape. Type 'done' when finished.")
     
     while True:
         url = input("URL: ").strip()
-        if url.lower() == 'done' or url == '':
+        if url.lower() == 'done' or not url:
             break
-        if not url:
-            continue
             
-        # Add protocol if missing
         if not re.match(r'^https?:\/\/', url):
             url = 'https://' + url
         
-        # Quick format validation first
         if not is_valid_url_format(url):
             print(f"✗ Invalid URL format: {url}")
             continue
         
-        # Validate URL accessibility
         print(f"Validating {url}...")
         is_valid, message = is_valid_url(url)
         
@@ -154,318 +150,186 @@ def get_urls():
             urls.append(url)
             print(f"✓ Added: {url}")
         else:
-            # For SSL/connection errors, still allow adding since we have fallbacks
-            if 'ssl' in message.lower() or 'handshake' in message.lower() or 'will try' in message.lower():
-                print(f"⚠ {message}")
+            print(f"⚠ {message}")
+            force = input("Add anyway? Site might strictly require a real browser (y/N): ").lower().strip()
+            if force in ['y', 'yes', '1']:
                 urls.append(url)
-                print(f"✓ Added (will attempt with fallback methods): {url}")
-            else:
-                print(f"✗ Skipped: {message}")
+                print(f"✓ Added (forced): {url}")
                 
-                # Ask if user wants to add anyway
-                force_add = input("Add anyway? (y/N): ").lower().strip()
-                if force_add in ['y', 'yes', '1']:
-                    urls.append(url)
-                    print(f"⚠ Added (forced): {url}")
-    
     return urls
 
 
 def clean_and_format_text(soup):
     """
-    Extract and format content from a BeautifulSoup object, with improved logic
-    for handling complex pages like Wikipedia and better table processing.
-    Designed to be flexible for any website.
+    Advanced Readability-based Content Extractor and Markdown Generator.
+    Drastically improved to ignore noise and perfectly format tables/lists.
     """
+    # 1. Clean out completely irrelevant DOM elements
+    for element in soup(['script', 'style', 'noscript', 'meta', 'link', 'iframe', 'svg', 
+                         'canvas', 'form', 'nav', 'footer', 'aside', 'header', 'button', 'input']):
+        element.decompose()
     
-    # Remove comments first
     for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
         comment.extract()
-    
-    # Remove unwanted elements
-    for element in soup(["script", "style", "noscript", "meta", "link", "iframe", "svg", "canvas", "textarea", "input", "button", "form"]):
-        element.decompose()
+        
+    # ATUALIZAÇÃO: Adicionado filtros agressivos para caixas de navegação de Wikis
+    for selector in[
+        ".comment", "#comments", ".advertisement", ".sidebar", ".menu", ".cookie-banner",
+        ".navbox", ".infobox", ".metadata", ".toc", "#toc",
+        "table[class*='navbox']", "div[class*='navbox']", "table[class*='infobox']"
+    ]:
+        for el in soup.select(selector):
+            el.decompose()
 
-    # Specifically remove comment forms or other interaction areas
-    for selector in ["#pcomment-form", ".reply-form", ".comment-form"]:
-        for element in soup.select(selector):
-            element.decompose()
-
-    # Enhanced content selectors with priority ordering
-    content_selectors = [
-        'body > div.main-container > div.resizable-container > div.page.has-right-rail > main',
-        'main', 'article', '[role="main"]', '[role="article"]',  # Semantic HTML5 first
-        '#content', '#main-content', '.main-content', '#mw-body', '.content', '.bodyContent',
-        '.post-content', '#vector-body', '#mw-content-text', 'div[role="main"]',
-        '.entry-content', '.article-content', '.page-content', '.story-body',
-        '.article-body', '.post-body', '[itemprop="articleBody"]'
-    ]
-    
-    # Find first available content area
+    # 2. Heuristic Content Detection
     main_content = None
-    for selector in content_selectors:
+    for selector in ['article', 'main', '[role="main"]', '#main-content', '.main-content']:
         main_content = soup.select_one(selector)
-        if main_content:
-            break
-
-    # Fallback to body
+        if main_content: break
+        
     if not main_content:
-        main_content = soup.body or soup
-
-    # check if this is the user-specified priority container to allow all content
-    is_priority_container = False
-    priority_selector = 'body > div.main-container > div.resizable-container > div.page.has-right-rail > main'
-    if main_content:
-        # check if main_content is or contains the priority content
-        priority_match = soup.select_one(priority_selector)
-        if priority_match and (main_content == priority_match or priority_match in main_content.parents):
-            is_priority_container = True
-
-    if main_content and not is_priority_container:
-        # standard cleaning for other sites
-        for element in main_content.find_all(['nav', 'footer', 'aside', 'header', 'script', 'style']):
-            element.decompose()
-
-    def clean_cell_text(cell):
-        """Clean text from a table cell."""
-        # remove images and citations
-        for element in cell.find_all(['img', 'sup', 'small']):
-            element.decompose()
+        candidates = soup.find_all(['div', 'section'])
+        best_candidate = soup.body if soup.body else soup
+        highest_score = -1
         
-        # get clean text
-        text = cell.get_text(separator=' ', strip=True)
-        return re.sub(r'\s+', ' ', text).strip()
-
-    def process_element(element):
-        if isinstance(element, NavigableString):
-            text = element.strip()
-            # Skip if it's just whitespace or special characters
-            if re.match(r'^[\s\-–—·•|]*$', text):
-                return ""
-            return text
-            
-        if not isinstance(element, Tag):
-            return ""
-            
-        tag_name = element.name
-        
-        # Skip empty elements early
-        if not element.get_text(strip=True) and tag_name not in ['br', 'hr']:
-            return ""
-        
-        # Handle tables with improved logic
-        if tag_name == 'table':
-            # Skip tables that are likely layout tables
-            table_text = element.get_text(strip=True)
-            if len(table_text) < 20:  # Too small to be content
-                return ""
-            
-            # Check if it's a data table (has headers or multiple rows)
-            headers = element.find_all('th')
-            rows = element.find_all('tr')
-            
-            if len(rows) < 2 and not headers:  # Single row without headers
-                return ""
-            
-            table_rows = []
-            
-            # Process header row if exists
-            if headers:
-                header_texts = []
-                for th in headers[:10]:  # Limit columns to prevent spam
-                    header_text = clean_cell_text(th)
-                    if header_text:
-                        header_texts.append(header_text)
+        for candidate in candidates:
+            p_tags = candidate.find_all('p')
+            score = len(p_tags)
+            class_id_text = (candidate.get('class', [''])[0] + " " + candidate.get('id', '')).lower()
+            if any(bad in class_id_text for bad in['wrap', 'page', 'container', 'body']):
+                score -= 2
                 
-                if header_texts:
-                    table_rows.append("| " + " | ".join(header_texts) + " |")
-                    # Markdown table separator
-                    separators = ["---"] * len(header_texts)
-                    table_rows.append("| " + " | ".join(separators) + " |")
+            if score > highest_score and score > 2:
+                highest_score = score
+                best_candidate = candidate
+                
+        main_content = best_candidate
+
+    # 3. Robust HTML to Markdown recursive parser
+    def to_markdown(node, list_depth=0):
+        if isinstance(node, NavigableString):
+            text = str(node)
+            return re.sub(r'\s+', ' ', text)
             
-            # Process data rows
-            row_count = 0
-            empty_row_count = 0
+        if not isinstance(node, Tag):
+            return ""
             
-            for row in rows[:100]:  # Limit rows to prevent huge tables
-                # Skip rows that only contain headers if we already processed headers
-                if headers and row.find_all('th') and not row.find_all('td'):
-                    continue
+        tag = node.name
+        children_md = "".join(to_markdown(c, list_depth) for c in node.children)
+        
+        # Block Elements
+        if tag in['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+            level = tag[1]
+            return f"\n\n{'#' * int(level)} {children_md.strip()}\n\n"
+            
+        elif tag == 'p':
+            return f"\n\n{children_md.strip()}\n\n"
+            
+        elif tag in ['ul', 'ol']:
+            return f"\n{children_md}\n"
+            
+        elif tag == 'li':
+            indent = "  " * list_depth
+            prefix = "- " if node.parent and node.parent.name == 'ul' else "1. "
+            inner = "".join(to_markdown(c, list_depth + 1) for c in node.children).strip()
+            return f"\n{indent}{prefix}{inner}"
+            
+        elif tag == 'blockquote':
+            return "\n\n" + "\n".join(f"> {line}" for line in children_md.strip().split("\n")) + "\n\n"
+            
+        elif tag in ['pre', 'code']:
+            if tag == 'code' and node.parent.name != 'pre':
+                return f"`{children_md.strip()}`"
+            text = node.get_text()
+            return f"\n\n```\n{text}\n```\n\n"
+            
+        # ATUALIZAÇÃO: Lógica de Tabelas (GitHub Flavored Markdown) aprimorada
+        elif tag == 'table':
+            # Se for uma tabela DENTRO de outra tabela, o Markdown quebra. 
+            # Então nós a tratamos apenas como texto plano.
+            if node.find_parent('table'):
+                return f" {children_md.strip()} "
+
+            # Pega apenas as linhas que pertencem DIRETAMENTE a esta tabela (ignora tabelas filhas)
+            rows =[]
+            for child in node.children:
+                if child.name in ['thead', 'tbody', 'tfoot']:
+                    rows.extend(child.find_all('tr', recursive=False))
+                elif child.name == 'tr':
+                    rows.append(child)
                     
-                cells = []
-                cell_count = 0
+            if not rows: return ""
+            
+            table_md = "\n\n"
+            valid_rows = 0
+            
+            for i, row in enumerate(rows):
+                # Pega apenas as células diretas (evita vazamento de tabelas aninhadas)
+                cells = row.find_all(['td', 'th'], recursive=False)
+                if not cells: continue
                 
-                for cell in row.find_all(['td', 'th'])[:10]:  # Limit columns
-                    cell_text = clean_cell_text(cell)
-                    cells.append(cell_text if cell_text else "")
-                    if cell_text:
-                        cell_count += 1
+                # O Markdown NÃO permite quebras de linha dentro de uma célula da tabela
+                # O strip() e split() transformam quebras de linha em espaços
+                cell_text =[" ".join(to_markdown(c).strip().split()) for c in cells]
+                table_md += "| " + " | ".join(cell_text) + " |\n"
                 
-                # Only add rows that have at least one non-empty cell
-                if cell_count > 0:
-                    table_rows.append("| " + " | ".join(cells) + " |")
-                    row_count += 1
-                else:
-                    empty_row_count += 1
-                    
-                # Stop if too many empty rows in a row
-                if empty_row_count > 3:
-                    break
+                # Adiciona a linha de separação após a primeira linha
+                if valid_rows == 0:
+                    table_md += "| " + " | ".join(["---"] * len(cells)) + " |\n"
+                
+                valid_rows += 1
             
-            # Only return table if it has meaningful content
-            if table_rows and row_count > 0:
-                return "\n\n" + "\n".join(table_rows) + "\n\n"
-            else:
-                return ""
-        
-        # Handle pre/code blocks
-        if tag_name in ['pre', 'code']:
-            code_text = element.get_text(strip=False)
-            if code_text.strip():
-                if tag_name == 'pre' or (element.parent and element.parent.name == 'pre'):
-                    return f"\n```\n{code_text.strip()}\n```\n"
-                else:
-                    return f" `{code_text.strip()}` "
-            return ""
-        
-        # Handle blockquotes
-        if tag_name == 'blockquote':
-            quote_content = []
-            for child in element.children:
-                child_text = process_element(child)
-                if child_text:
-                    quote_content.append(child_text)
+            return table_md + "\n"
+
+        # Inline Elements
+        elif tag in ['strong', 'b']:
+            return f" **{children_md.strip()}** "
             
-            if quote_content:
-                joined = ' '.join(quote_content).strip()
-                # Add > to each line of the quote
-                quoted = '\n'.join([f"> {line}" for line in joined.split('\n') if line.strip()])
-                return f"\n{quoted}\n"
-            return ""
-        
-        # Process children for other elements
-        content = []
-        for child in element.children:
-            child_content = process_element(child)
-            if child_content:  # Only add non-empty content
-                content.append(child_content)
-        
-        if not content and tag_name not in ['br', 'hr']:  # Skip if no content after processing
-            return ""
+        elif tag in ['em', 'i']:
+            return f" *{children_md.strip()}* "
             
-        joined_content = " ".join(content).strip()
-        
-        # Format based on tag type
-        if tag_name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-            level = int(tag_name[1])
-            # Skip headers that are too short or just numbers
-            if len(joined_content) < 2 or re.match(r'^\d+\.?$', joined_content):
-                return ""
-            return f"\n\n{'#' * level} {joined_content}\n\n"
-        elif tag_name == 'p':
-            return f"\n{joined_content}\n"
-        elif tag_name == 'div':
-            # Only add newlines if it seems like a block element
-            if len(joined_content) > 50 or '\n' in joined_content:
-                return f"\n{joined_content}\n"
-            return joined_content
-        elif tag_name == 'li':
-            # Check parent to determine list type
-            parent = element.find_parent(['ul', 'ol'])
-            if parent and parent.name == 'ol':
-                # Try to get the index
-                siblings = parent.find_all('li', recursive=False)
-                try:
-                    index = siblings.index(element) + 1
-                    return f"{index}. {joined_content}\n"
-                except ValueError:
-                    return f"1. {joined_content}\n"
-            else:
-                return f"- {joined_content}\n"
-        elif tag_name in ['strong', 'b']:
-            return f"**{joined_content}**"
-        elif tag_name in ['em', 'i']:
-            return f"*{joined_content}*"
-        elif tag_name == 'u':
-            return f"<u>{joined_content}</u>"
-        elif tag_name == 's' or tag_name == 'strike' or tag_name == 'del':
-            return f"~~{joined_content}~~"
-        elif tag_name == 'a':
-            # User wants to avoid the URL part, just keep the text in brackets
-            if not joined_content or not joined_content.strip():
-                return ""
-            return f"[{joined_content}]"
-        elif tag_name == 'br':
-            return "\n"
-        elif tag_name == 'hr':
-            return "\n---\n"
-        elif tag_name in ['ul', 'ol']:
-            return f"\n{joined_content}\n"
+        elif tag == 'a':
+            href = node.get('href', '')
+            text = children_md.strip()
+            if not text: return ""
+            if href.startswith('http'):
+                return f" [{text}]({href}) "
+            return f" [{text}] "
+            
+        elif tag in ['br', 'hr']:
+            return "\n" if tag == 'br' else "\n\n---\n\n"
+            
         else:
-            return joined_content
+            return children_md
 
-    # Process the main content
-    result = process_element(main_content)
+    # Process and cleanup final Markdown
+    raw_md = to_markdown(main_content)
     
-    # Clean up the final result
-    # Remove excessive newlines (strictly more than 1 blank line)
-    result = re.sub(r'\n{3,}', '\n\n', result)
+    # Cleanup regexes
+    cleaned_md = re.sub(r'\n{3,}', '\n\n', raw_md)          # Max 2 newlines
+    cleaned_md = re.sub(r' +(\n|$)', r'\1', cleaned_md)     # Trailing spaces
+    cleaned_md = re.sub(r'( \*\*|\*\* )', '**', cleaned_md) # Bold spacing
+    cleaned_md = re.sub(r'( \*|\* )', '*', cleaned_md)      # Italic spacing
+    # Remove pipes vazios excessivos que sobram de tabelas complexas
+    cleaned_md = re.sub(r'\|\s+\|\s+\|', '| |', cleaned_md) 
     
-    # Remove empty bullets and list items
-    result = re.sub(r'^[•·\-]\s*$', '', result, flags=re.MULTILINE)
-    result = re.sub(r'^\d+\.\s*$', '', result, flags=re.MULTILINE)
-    
-    # Clean up empty headers
-    result = re.sub(r'^#+\s*$', '', result, flags=re.MULTILINE)
-    
-    # Remove multiple spaces (but preserve indentation if any, though we don't use it much)
-    result = re.sub(r' {2,}', ' ', result)
-
-    # Remove empty brackets [ ], [  ] or similar artifacts
-    result = re.sub(r'\[\s*\]', '', result)
-    
-    # Remove trailing whitespace on each line
-    result = re.sub(r'[ \t]+$', '', result, flags=re.MULTILINE)
-    
-    # Fix spacing around bold/italic
-    result = re.sub(r'\*\* ', '**', result)
-    result = re.sub(r' \*\*', '**', result)
-    result = re.sub(r'\* ', '*', result)
-    result = re.sub(r' \*', '*', result)
-    
-    # Final cleanup - remove leading/trailing whitespace
-    result = result.strip()
-    
-    # If result is too short, it's probably not meaningful content
-    if len(result.split()) < 10:
-        return ""
-    
-    return result
+    return cleaned_md.strip()
 
 
 def scrape_with_requests(url, verify_ssl=True):
-    """
-    Scrape a single URL using requests library.
-    Returns (content, title, success) tuple.
-    """
+    """Scrapes URL using requests. Optimized for speed and encoding fallbacks."""
     try:
-        session = create_session_with_retries(retries=3, verify_ssl=verify_ssl)
-        response = session.get(url, timeout=30, verify=verify_ssl)
+        session = create_session_with_retries(retries=2, verify_ssl=verify_ssl)
+        response = session.get(url, timeout=20, verify=verify_ssl)
         response.raise_for_status()
         
-        # Check if we got actual HTML content
         content_type = response.headers.get('content-type', '').lower()
         if 'text/html' not in content_type and 'text/plain' not in content_type:
             return None, None, False
-        
-        # use content (bytes) instead of text to let BeautifulSoup handle encoding detection
-        # this is especially important for sites with non-UTF-8 encodings (like Shift-JIS)
+            
+        # Let BeautifulSoup handle charset parsing from response.content natively
         soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Extract title
-        page_title = "Untitled Page"
-        if soup.title and soup.title.string:
-            page_title = soup.title.string.strip()
+        page_title = soup.title.string.strip() if soup.title and soup.title.string else "Untitled Page"
         
         formatted_text = clean_and_format_text(soup)
         
@@ -473,139 +337,92 @@ def scrape_with_requests(url, verify_ssl=True):
             return formatted_text, page_title, True
         return None, None, False
         
-    except (requests.exceptions.SSLError, ssl.SSLError) as e:
+    except (requests.exceptions.SSLError, ssl.SSLError):
         if verify_ssl:
-            # Retry without SSL verification
             return scrape_with_requests(url, verify_ssl=False)
         return None, None, False
-    except Exception as e:
+    except Exception:
         return None, None, False
-    
+
 
 def scrape_with_selenium(urls, use_requests_fallback=True):
-    """Scrape URLs using Selenium with better error handling and fallback options."""
+    """
+    Drastically improved Selenium implementation. 
+    Uses Selenium 4 built-in manager (NO MORE hardcoded executable_paths).
+    Incorporates advanced stealth mechanisms to bypass bot protection.
+    """
     if not urls:
         print("No URLs provided for scraping.")
         return ""
     
     all_text = ""
     driver = None
-    
-    # Load configuration
-    config = config_manager.load_config()
+    config = config_manager.load_config() if hasattr(config_manager, 'load_config') else {}
     browser_cfg = config.get("browser_config", {})
-    saved_name = browser_cfg.get("browser_name")
-    saved_type = browser_cfg.get("browser_type")
-    saved_binary = browser_cfg.get("binary_path")
+    preferred_browser = browser_cfg.get("browser_name", "Chrome")
 
-    def get_common_chrome_options(is_edge=False):
+    def get_stealth_chrome_options(is_edge=False):
         options = EdgeOptions() if is_edge else ChromeOptions()
-        options.add_argument('--disable-blink-features=AutomationControlled')
-        options.add_experimental_option('useAutomationExtension', False)
-        options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-        options.add_argument('--disable-web-security')
-        options.add_argument('--allow-running-insecure-content')
-        options.add_argument('--ignore-certificate-errors')
-        options.add_argument('--ignore-ssl-errors')
-        options.add_argument('--ignore-certificate-errors-spki-list')
-        options.add_argument('--disable-features=IsolateOrigins,site-per-process')
-        options.add_argument('--disable-extensions')
+        options.add_argument('--headless=new')
         options.add_argument('--disable-gpu')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--disable-setuid-sandbox')
-        options.add_argument('--headless=new')
-        options.add_argument('--disable-software-rasterizer')
-        options.add_argument('--disable-background-timer-throttling')
-        options.add_argument('--disable-backgrounding-occluded-windows')
-        options.add_argument('--disable-renderer-backgrounding')
-        options.add_argument('--log-level=3')
-        options.add_argument('--silent')
-        options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
+        options.add_argument('--disable-blink-features=AutomationControlled')
         options.add_argument('--window-size=1920,1080')
+        options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+        options.add_experimental_option('excludeSwitches', ['enable-automation', 'enable-logging'])
+        options.add_experimental_option('useAutomationExtension', False)
+        # Ignore security errors to ensure page loads successfully
+        options.add_argument('--ignore-certificate-errors')
+        options.add_argument('--allow-running-insecure-content')
+        options.add_argument('--log-level=3') 
+        options.add_argument('--silent')
         return options
 
-    # Try different browsers in order of preference
-    browsers_to_try = [
-        ("Brave", "chrome"),
-        ("Chrome", "chrome"),
-        ("Edge", "edge"),
-        ("Firefox", "firefox")
-    ]
+    # Browsers to attempt, putting the config-preferred one first
+    browsers = [("Chrome", "chrome"), ("Edge", "edge"), ("Firefox", "firefox")]
+    browsers.sort(key=lambda x: x[0] != preferred_browser)
 
-    # If we have a saved config, move it to the front
-    if saved_name and saved_type:
-        # remove it from the list first
-        browsers_to_try = [b for b in browsers_to_try if b[0] != saved_name]
-        # insert it at the beginning
-        browsers_to_try.insert(0, (saved_name, saved_type))
-
-    for browser_name, browser_type in browsers_to_try:
+    for browser_name, browser_type in browsers:
         try:
+            print(f"Setting up {browser_name} via Selenium 4 Auto-Manager...")
+            
             if browser_type == "chrome":
-                options = get_common_chrome_options(is_edge=False)
-                
-                # Use saved binary if it matches the browser we are trying
-                if browser_name == saved_name and saved_binary and os.path.exists(saved_binary):
-                    options.binary_location = saved_binary
-                elif browser_name == "Brave":
-                    brave_paths = [
-                        os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'), 'BraveSoftware\\Brave-Browser\\Application\\brave.exe'),
-                        os.path.join(os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)'), 'BraveSoftware\\Brave-Browser\\Application\\brave.exe'),
-                        os.path.join(os.environ.get('LOCALAPPDATA', ''), 'BraveSoftware\\Brave-Browser\\Application\\brave.exe'),
-                    ]
-                    for path in brave_paths:
-                        if os.path.exists(path):
-                            options.binary_location = path
-                            break
-                    else:
-                        continue # Skip Brave if binary not found
-                
-                print(f"Attempting to set up {browser_name} driver...")
-                service = ChromeService(executable_path=r"..\\chromedriver.exe", log_output=os.devnull)
-                driver = webdriver.Chrome(service=service, options=options)
-                
+                driver = webdriver.Chrome(options=get_stealth_chrome_options(is_edge=False))
             elif browser_type == "edge":
-                print("Attempting to set up Edge driver...")
-                options = get_common_chrome_options(is_edge=True)
-                if browser_name == saved_name and saved_binary and os.path.exists(saved_binary):
-                    options.binary_location = saved_binary
-                service = EdgeService(executable_path=r"..\\msedgedriver.exe", log_output=os.devnull)
-                driver = webdriver.Edge(service=service, options=options)
-                
+                driver = webdriver.Edge(options=get_stealth_chrome_options(is_edge=True))
             elif browser_type == "firefox":
-                print("Attempting to set up Firefox driver...")
                 options = FirefoxOptions()
                 options.add_argument('--headless')
-                service = FirefoxService(executable_path=r"..\\geckodriver.exe", log_output=os.devnull)
-                driver = webdriver.Firefox(service=service, options=options)
+                driver = webdriver.Firefox(options=options)
 
             if driver:
-                print(f"✓ {browser_name} driver initialized successfully")
+                print(f"✓ {browser_name} initialized successfully.")
                 
-                # Save configuration if it changed or was empty
-                if browser_name != saved_name:
-                    binary_path = getattr(options, 'binary_location', None)
-                    config["browser_config"] = {
-                        "browser_name": browser_name,
-                        "browser_type": browser_type,
-                        "binary_path": binary_path
-                    }
+                # Apply anti-bot stealth scripts via CDP
+                if browser_type in ["chrome", "edge"]:
+                    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+                        "source": """
+                            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                            window.navigator.chrome = {runtime: {}};
+                        """
+                    })
+                
+                # Save working browser to config
+                if browser_name != preferred_browser and hasattr(config_manager, 'save_config'):
+                    config["browser_config"] = {"browser_name": browser_name, "browser_type": browser_type}
                     config_manager.save_config(config)
-                    print(f"  → Saved {browser_name} as preferred browser in config.json")
-                
-                driver.set_page_load_timeout(60)
-                driver.implicitly_wait(10)
+                    
+                driver.set_page_load_timeout(45)
                 break
                 
         except Exception as e:
-            # print(f"  ✗ {browser_name} initialization failed: {e}") 
+            # Silently fail and try the next browser
             driver = None
             continue
 
-    driver_failed = driver is None
-    if driver_failed:
-        print("⚠ All browser drivers failed to initialize. Will use requests-based scraping as fallback.")
+    if not driver:
+        print("⚠ All browsers failed to initialize. Falling back to Requests engine.")
     
     successful_scrapes = 0
     total_urls = len(urls)
@@ -615,55 +432,24 @@ def scrape_with_selenium(urls, use_requests_fallback=True):
         formatted_text = None
         page_title = "Untitled Page"
         
-        # Try Selenium first if driver is available
-        if driver and not driver_failed:
+        if driver:
             try:
                 print(f"[{i}/{total_urls}] Loading {url} with Selenium...")
                 driver.get(url)
                 
-                # Multiple wait strategies for better content detection
-                try:
-                    # Wait for body first
-                    WebDriverWait(driver, 10).until(
-                        EC.presence_of_element_located((By.TAG_NAME, "body"))
-                    )
-                    
-                    # Then wait for common content containers
-                    content_selectors = [
-                        (By.CSS_SELECTOR, "body > div.main-container > div.resizable-container > div.page.has-right-rail > main"),
-                        (By.CSS_SELECTOR, "main, article, #content, .content, #main"),
-                        (By.CSS_SELECTOR, "p"),  # At least some paragraphs
-                    ]
-                    
-                    for selector in content_selectors:
-                        try:
-                            WebDriverWait(driver, 5).until(
-                                EC.presence_of_element_located(selector)
-                            )
-                            break
-                        except TimeoutException:
-                            continue
-                    
-                except TimeoutException:
-                    print(f"  ⚠ Page load timeout, attempting to extract available content...")
+                # Smart dynamic wait - wait until network is mostly idle or body loads
+                WebDriverWait(driver, 15).until(
+                    lambda d: d.execute_script("return document.readyState") == "complete"
+                )
                 
-                # Wait for dynamic content to load
-                time.sleep(2)
+                # Scroll to trigger lazy-loaded text/images
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
+                time.sleep(1.5) 
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(1)
                 
-                # Scroll to trigger lazy loading
-                try:
-                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
-                    time.sleep(1)
-                    driver.execute_script("window.scrollTo(0, 0);")
-                    time.sleep(0.5)
-                except:
-                    pass
-                
-                # Get page title
-                page_title = driver.title or "Untitled Page"
-                
-                # Get page source and parse
                 page_source = driver.page_source
+                page_title = driver.title or "Untitled Page"
                 
                 if page_source and len(page_source) > 500:
                     soup = BeautifulSoup(page_source, 'html.parser')
@@ -671,71 +457,69 @@ def scrape_with_selenium(urls, use_requests_fallback=True):
                     
                     if formatted_text and len(formatted_text.strip()) > 50:
                         scraped = True
-                        print(f"  ✓ Selenium scrape successful")
+                        print(f"  ✓ Selenium extraction successful")
                     else:
-                        print(f"  ⚠ Selenium returned empty/minimal content, trying fallback...")
-                else:
-                    print(f"  ⚠ Selenium returned empty page source, trying fallback...")
-                    
-            except TimeoutException as e:
-                print(f"  ⚠ Selenium timeout: {e}")
+                        print(f"  ⚠ Extracted content was too short. Trying fallback.")
+                        
+            except TimeoutException:
+                print(f"  ⚠ Page load timeout.")
             except WebDriverException as e:
-                error_msg = str(e).lower()
-                if 'handshake' in error_msg or 'ssl' in error_msg or 'certificate' in error_msg:
-                    print(f"  ⚠ SSL/TLS error with Selenium, trying fallback...")
-                else:
-                    print(f"  ⚠ Selenium error: {e}")
+                print(f"  ⚠ Selenium Navigation Error: {str(e).splitlines()[0]}")
             except Exception as e:
-                print(f"  ⚠ Selenium error: {e}")
+                print(f"  ⚠ Unexpected Selenium Error: {e}")
         
-        # fallback to requests if Selenium failed or wasn't available
+        # Fallback to requests if Selenium didn't work or content was blocked
         if not scraped and use_requests_fallback:
-            print(f"  → Trying requests-based scraping for {url}...")
+            print(f"  → Attempting Requests-based extraction for {url}...")
             content, req_title, success = scrape_with_requests(url)
             if success and content:
                 formatted_text = content
                 page_title = req_title
                 scraped = True
-                print(f"  ✓ Requests fallback successful")
+                print(f"  ✓ Requests extraction successful")
         
-        # Add content if we got any
         if scraped and formatted_text:
-            all_text += f"\n# {page_title}\n{formatted_text}\n"
+            all_text += f"\n# {page_title}\n\n{formatted_text}\n\n---\n"
             successful_scrapes += 1
-            print(f"✓ Successfully scraped: {url}")
+            print(f"✓ Scraped: {url}")
         else:
-            print(f"✗ Failed to scrape: {url} - No content extracted")
-    
-    # cleanup
+            print(f"✗ Failed: {url} - No readable content extracted")
+            
     if driver:
         try:
             driver.quit()
         except:
             pass
-    
-    # Summary
+            
     print(f"\n{'='*50}")
     print(f"Scraping complete: {successful_scrapes}/{total_urls} URLs successful")
     
     if not all_text.strip():
         print("⚠ Warning: No content was scraped from any URLs")
-    
+        
     return all_text
 
+
 def save_to_file(text, filename="scraped_content.txt"):
-    """Save text to a file."""
+    """Saves text safely to a file."""
+    if not text.strip():
+        print("Nothing to save.")
+        return
+        
     try:
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(text)
-        print(f"Content successfully saved to {filename}")
+        print(f"✓ Content successfully saved to '{filename}'")
     except IOError as e:
-        print(f"Error saving file: {e}")
+        print(f"✗ Error saving file: {e}")
+
 
 if __name__ == "__main__":
+    # Ensure BeautifulSoup is available for self-test
     urls_to_scrape = get_urls()
     if urls_to_scrape:
         scraped_content = scrape_with_selenium(urls_to_scrape)
         if scraped_content.strip():
             save_to_file(scraped_content)
             print("\n--- Preview of Scraped Content ---")
-            print(scraped_content[:1000])
+            print(scraped_content[:1500] + "\n\n... [TRUNCATED] ...")
