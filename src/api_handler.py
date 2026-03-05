@@ -39,9 +39,11 @@ def load_instructions():
         return "Error: Could not find character generation instructions."
 
 try:
-    from google import generativeai as genai
+    from google import genai
+    from google.genai import types as genai_types
 except ImportError:
     genai = None
+    genai_types = None
     
 class APIHandler:
     """Handles all API communications for different providers"""
@@ -183,33 +185,37 @@ class APIHandler:
     def call_gemini(config, system_parts, instructions, image_object):
         """Handle Gemini API calls"""
         if not genai:
-            raise ImportError("'google-generativeai' library not installed")
+            raise ImportError("'google-genai' library not installed")
             
         api_key = config.get('gemini_api_key') or os.environ.get("GEMINI_API_KEY")
         if not api_key or "YOUR_" in api_key:
             raise ValueError("Gemini API key not set")
         
-        genai.configure(api_key=api_key)
+        client = genai.Client(api_key=api_key)
         use_system_instruction = config.get('separate_system_messages', False)
         provider_models = config.get('provider_models', {})
         model_name = provider_models.get('gemini')
         if use_system_instruction:
             print("INFO: Using 'system_instruction' for system messages.")
-            model = genai.GenerativeModel(
-                model_name=model_name,
-                system_instruction="\n".join(system_parts)
-            )
             user_content = [instructions] if instructions else []
             if image_object:
                 user_content.append(image_object)
-            response = model.generate_content(user_content)
+            response = client.models.generate_content(
+                model=model_name,
+                config=genai_types.GenerateContentConfig(
+                    system_instruction="\n".join(system_parts)
+                ),
+                contents=user_content
+            )
         else:
             print("INFO: Combining all messages into the 'contents' parameter.")
-            model = genai.GenerativeModel(config['model_name'])
             contents = system_parts + ([instructions] if instructions else [])
             if image_object:
                 contents.append(image_object)
-            response = model.generate_content(contents)
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents
+            )
             
         return response.text
     
