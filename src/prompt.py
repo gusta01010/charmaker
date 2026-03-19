@@ -10,7 +10,7 @@ Preset 3		87.75			   87.00		   87.68
     google/gemini-3.1-pro-preview-grounding,
     gpt-5.2-search
     
-using same 3 URLS + 1 image.
+using same 3 URLS + 1 image and gemini-3-flash-preview to generate.
 
 Preset 1: Captures character's psychological profile, alive experience
 Preset 2: Prioritizes dramatic flair and "spicy" dialogue over strict wiki-adherence, cinematic experience
