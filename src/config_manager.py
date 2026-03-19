@@ -5,6 +5,9 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 DEFAULT_CONFIG = {
     "save_location": "saved_characters",
     "api_provider": "groq",
+    "dark_mode": False,
+    "preset": "Preset 3",
+    "check_token_count": True,
     "groq_api_key": "YOUR_GROQ_API_KEY_HERE",
     "openrouter_api_key": "YOUR_OPENROUTER_API_KEY_HERE",
     "gemini_api_key": "YOUR_GEMINI_API_KEY_HERE",
