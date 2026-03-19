@@ -23,8 +23,14 @@ class ImageHandler:
         parsed = urlparse(url.lower())
         path = parsed.path
         
-        # direct extension check first
-        if any(path.endswith(ext) for ext in ImageHandler.SUPPORTED_FORMATS):
+        # look for extensions anywhere in the path, ignoring anything after the extension
+        # e.g., wiki/images/Alectra.png/revision/latest will trigger here.
+        if any(f"{ext}/" in path or path.endswith(ext) for ext in ImageHandler.SUPPORTED_FORMATS):
+            return True
+            
+        # fallback path regex lookup for images that have query parameters or deeper paths
+        import re
+        if re.search(r'\.(jpg|jpeg|png|gif|webp|bmp)(/|\?|$)', url.lower()):
             return True
         
         image_indicators = ['image', 'img', 'photo', 'pic', 'thumb', 'avatar', 'banner']
