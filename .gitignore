@@ -45,7 +45,6 @@ saved_characters/
 *.temp
 *.cache
 *.json
-interface.py
 .*
 
 
