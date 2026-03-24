@@ -523,3 +523,64 @@ if __name__ == "__main__":
             save_to_file(scraped_content)
             print("\n--- Preview of Scraped Content ---")
             print(scraped_content[:1500] + "\n\n... [TRUNCATED] ...")
+
+import asyncio
+import os
+
+def scrape_with_crawl4ai(urls, headless=True):
+    try:
+        from crawl4ai import BrowserConfig, CrawlerRunConfig, AsyncWebCrawler, DefaultMarkdownGenerator
+    except ImportError:
+        print("crawl4ai is not installed, falling back to legacy scraper.")
+        return None
+
+    async def _crawl():
+        os.environ["NODE_OPTIONS"] = "--no-deprecation"
+        browser_config = BrowserConfig(
+            headless=headless,
+            verbose=False,
+            use_persistent_context=True,
+            user_data_dir="./.crawl4ai_profile",
+        )
+
+        wait_for_loading = """js:() => {
+            const text = document.body ? document.body.innerText : '';
+            return !text.includes('Loading page resources.') && !text.includes('The site isn\\'t loading');
+        }"""
+
+        config = CrawlerRunConfig(
+            wait_for=wait_for_loading,
+            delay_before_return_html=3.0,
+            css_selector="body",
+            excluded_tags=["footer", "nav"],
+            excluded_selector=".toc, .wds-global-footer, #catlinks, .printfooter, .global-top-navigation, .notifications-placeholder, #community-navigation, .community-header-wrapper, .global-explore-navigation, .global-footer, .global-footer__content, .global-footer__bottom, .fandom-community-header, #navigator, #header, .full_hr, .menubar, #toolbar, #lastmodified, #footer, #cosmos-footer, #cosmos-toolbar, .cosmos-header, #cosmos-banner, .mw-header, #mw-head, #mw-panel, #mw-page-base, #mw-head-base, .mw-footer, .mw-footer-container, .vector-column-end, .vector-sticky-pinned-container, .azltable, .page__rioque ght-rail, #google_translate_element, #onetrust-banner-sdk, #onetrust-consent-sdk, #top_leaderboard-odyssey-wrapper, .navibox, .mw-collapsible, .pcomment, #google_translate_element, #goog-gt-tt, #goog-gt-vt",
+            markdown_generator=DefaultMarkdownGenerator(
+                options={"ignore_links": True, "skip_internal_links": True}
+            )
+        )
+
+        all_text = ""
+        async with AsyncWebCrawler(config=browser_config) as crawler:
+            for url in urls:
+                try:
+                    result = await crawler.arun(url=url, config=config)
+                    if result.success:
+                        all_text += f"\n--- Content from {url} ---\n"
+                        all_text += str(result.markdown)
+                    else:
+                        print(f"Failed to crawl {url}: {result.error_message}")
+                except Exception as e:
+                    print(f"Error crawling {url}: {e}")
+        return all_text
+
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running(): 
+            # When we run from Tkinter, it doesn't normally have an asyncio loop running,
+            # but if it does, returning coroutine and letting callers manage it would be correct.
+            # We'll just run in a new thread if needed.
+            pass
+    except RuntimeError:
+        pass
+        
+    return asyncio.run(_crawl())

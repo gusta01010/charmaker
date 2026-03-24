@@ -1,22 +1,22 @@
 """
 Scorecard (Accuracy + Roleplaying quality):
-        	Description	    	  Greeting		 Combined
-Preset 1     	80.50	           83.00	       81.33
-Preset 2     	71.38	           80.75	       75.95
-Preset 3		87.75			   87.00		   87.68
+        	Description    Greeting     Combined  
+Preset 1    88.3           88.0         88.2
+Preset 2    78.0           84.3         81.2 
+Preset 3    82.0           78.0         80.0
+
 -Average analyzed with internet sources from the models:
 	anthropic/claude-opus-4.6-search
-    anthropic/claude-opus-4.6-search
     google/gemini-3.1-pro-preview-grounding,
     gpt-5.2-search
     
-using same 3 URLS + 1 image and gemini-3-flash-preview to generate.
+using the same 2 URLS + 2 images and gemini-3-flash-preview + crawl4ai to generate.
 
-Preset 1: Captures character's psychological profile, alive experience
-Preset 2: Prioritizes dramatic flair and "spicy" dialogue over strict wiki-adherence, cinematic experience
-Preset 3: Sensory-rich prose that excels at atmospheric writing and internal emotional depth, fewest factual errors.
+Preset 1: Experimental,  great results.
+Preset 2: Tends to write shorter descriptions (1300 - 2100)
+Preset 3: Tends to write longer descriptions (2000 - 3500)
 """
 
 from presets import PRESET1, PRESET2, PRESET3
 
-INSTRUCTIONS = PRESET3
+INSTRUCTIONS = PRESET1

@@ -297,18 +297,133 @@ def _exit_program():
     print("Exiting program.")
     return True
 
+def _toggle_gemini_grounding(config):
+    current = config.get('gemini_grounding', False)
+    config['gemini_grounding'] = not current
+    config_manager.save_config(config)
+    status = "enabled" if config['gemini_grounding'] else "disabled"
+    print(f"✓ Gemini Grounding with Google Search is now {status}.")
+    return None
+
+def _scraping_options_menu(config):
+    while True:
+        print(f"\n{'-'*40}")
+        print("\t Scraping Options")
+        print(f"{'-'*40}")
+        
+        engine = config.get('scraper_engine', 'legacy')
+        headless = "enabled" if config.get('crawl4ai_headless', True) else "disabled"
+        
+        print(f"  Current Engine: {engine}")
+        if engine == 'crawl4ai':
+            print(f"  Headless Mode: {headless}")
+        print(f"{'-'*40}")
+        
+        options = [
+            "Switch Scraper Engine (legacy / crawl4ai)",
+            "Toggle Crawl4AI Headless Mode",
+            "Back to Settings"
+        ]
+        
+        for i, opt in enumerate(options, 1):
+            print(f"{i}. {opt}")
+            
+        choice = input("\nSelect option > ").strip()
+        
+        if choice == '1':
+            update_config_setting(config, 'scraper_engine', 'Select Engine', ['legacy', 'crawl4ai'])
+        elif choice == '2':
+            current_h = config.get('crawl4ai_headless', True)
+            config['crawl4ai_headless'] = not current_h
+            config_manager.save_config(config)
+            print(f"✓ Headless mode is now {'enabled' if not current_h else 'disabled'}.")
+        elif choice == '3':
+            break
+
+def _settings_menu(config):
+    """Settings submenu loop"""
+    while True:
+        print(f"\n{'-'*60}")
+        print("\t\t\t Settings")
+        print(f"{'-'*60}")
+        
+        provider = config.get('api_provider', 'groq')
+        model = config_manager.get_current_model(config)
+        api_key = config.get(f'{provider}_api_key', '')
+        key_status = '✓ Configured' if (api_key and 'YOUR_' not in api_key) else '✗ Not Set'
+        
+        print(f"  Provider: {provider.upper()} | Model: {model}")
+        print(f"  API Key: {key_status}")
+        print(f"  Save Location: '{config['save_location']}'")
+        separate_status = "enabled" if config.get('separate_system_messages', False) else "disabled"
+        print(f"  Separate System Messages: {separate_status}")
+        
+        # display Gemini grounding status if provider is gemini
+        if provider == 'gemini':
+            grounding_status = "enabled" if config.get('gemini_grounding', False) else "disabled"
+            print(f"  Gemini Grounding: {grounding_status}")
+            
+        print(f"  Preset: {config.get('preset', 'Preset 3')}")
+        print(f"  Scraper Engine: {config.get('scraper_engine', 'legacy')}")
+        print(f"{'-'*60}")
+
+        settings_options = [
+            "Change Save Location",
+            "Switch Provider",
+            "Change Model (Current Provider)",
+            "Configure API Keys",
+            "Toggle Separate System Messages",
+            "Preset Selection"
+        ]
+        
+        if provider == 'gemini':
+            settings_options.append("Toggle Gemini Grounding (Google Search)")
+            
+        settings_options.append("Scraping Options")
+        settings_options.append("Back to Main Menu")
+
+        for i, opt in enumerate(settings_options, 1):
+            print(f"{i}. {opt}")
+
+        choice = input("\nSelect option > ").strip()
+        
+        try:
+            choice_idx = int(choice) - 1
+            if choice_idx < 0 or choice_idx >= len(settings_options):
+                raise ValueError()
+            selected_opt = settings_options[choice_idx]
+        except ValueError:
+            print("Invalid option. Please try again.")
+            continue
+
+        if selected_opt == "Change Save Location":
+            _change_save_location(config)
+        elif selected_opt == "Switch Provider":
+            update_config_setting(config, 'provider_change', 'Switch provider')
+        elif selected_opt == "Change Model (Current Provider)":
+            update_config_setting(config, 'model_change', 'Change model')
+        elif selected_opt == "Configure API Keys":
+            update_config_setting(config, 'api_key_setup', 'Configure API keys')
+        elif selected_opt == "Toggle Separate System Messages":
+            _toggle_separate_system_messages(config)
+        elif selected_opt == "Preset Selection":
+            update_config_setting(config, 'preset', 'Select Preset', ['preset 1', 'preset 2', 'preset 3'])
+        elif selected_opt == "Toggle Gemini Grounding (Google Search)":
+            _toggle_gemini_grounding(config)
+        elif selected_opt == "Scraping Options":
+            _scraping_options_menu(config)
+        elif selected_opt == "Back to Main Menu":
+            break
+
 def main():
     """Main application loop"""
     config = config_manager.load_config()
 
     menu_actions = {
+        '0': lambda: os.system('python interface.py') or _exit_program(),
         '1': lambda: run_character_creation_flow(config) if _is_provider_ready(config) else None,
-        '2': lambda: _change_save_location(config),
-        '3': lambda: update_config_setting(config, 'provider_change', 'Switch provider'),
-        '4': lambda: update_config_setting(config, 'model_change', 'Change model'),
-        '5': lambda: update_config_setting(config, 'api_key_setup', 'Configure API keys'),
-        '6': lambda: _toggle_separate_system_messages(config),
-        '7': _exit_program  # Only this returns True to exit
+        '2': lambda: _settings_menu(config),
+        '3': _exit_program
     }
 
     while True:
@@ -318,30 +433,14 @@ def main():
         print("\t\t\t CharMaker")
         print(f"{'='*60}")
 
-        provider = config.get('api_provider', 'groq')
-        model = config_manager.get_current_model(config)
-        api_key = config.get(f'{provider}_api_key', '')
-        key_status = '✓ Configured' if (api_key and 'YOUR_' not in api_key) else '✗ Not Set'
-
-        print(f"  Provider: {provider.upper()} | Model: {model}")
-        print(f"  API Key: {key_status}")
-        print(f"  Save Location: '{config['save_location']}'")
-
-        separate_status = "enabled" if config.get('separate_system_messages', False) else "disabled"
-        print(f"  Separate System Messages: {separate_status}")
-        print(f"{'-'*60}")
-
         menu_options = [
+            "🪟  (NEW!) Switch to GUI Mode",
             "🚀 Start Character Creation",
-            "📁 Change Save Location", 
-            "🔄 Switch Provider",
-            "🎯 Change Model (Current Provider)",
-            "🔑 Configure API Keys",
-            "⚙️  Toggle Separate System Messages",
+            "⚙️ Settings",
             "❌ Exit"
         ]
 
-        for i, opt in enumerate(menu_options, 1):
+        for i, opt in enumerate(menu_options, 0):
             print(f"{i}. {opt}")
 
         choice = input("\nSelect option > ").strip()

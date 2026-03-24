@@ -40,6 +40,7 @@ def load_instructions():
 
 try:
     from google import genai
+    from google.genai.types import GoogleSearch
     from google.genai import types as genai_types
 except ImportError:
     genai = None
@@ -51,7 +52,31 @@ class APIHandler:
     INSTRUCTIONS = load_instructions()
 
     @staticmethod
-    def call_openai_style(config, system_parts, instructions, image_object):
+    def _normalize_images(image_input):
+        """Normalize image input to a list for multi-image support."""
+        if image_input is None:
+            return []
+        if isinstance(image_input, list):
+            return [img for img in image_input if img is not None]
+        return [image_input]
+
+    @staticmethod
+    def _combine_same_roles(messages):
+        """Combine adjacent messages with the same role (system-system, user-user)."""
+        if not messages:
+            return messages
+
+        combined = [messages[0]]
+        for msg in messages[1:]:
+            last = combined[-1]
+            if msg.get("role") == last.get("role") and isinstance(msg.get("content"), str) and isinstance(last.get("content"), str):
+                last["content"] = f"{last['content']}\n\n{msg['content']}"
+            else:
+                combined.append(msg)
+        return combined
+
+    @staticmethod
+    def call_openai_style(config, content_text, instructions, image_objects):
         """Handle Groq/OpenRouter API calls with fixed OpenRouter compatibility"""
         provider = config['api_provider']
         api_key = config.get(f"{provider}_api_key")
@@ -72,35 +97,37 @@ class APIHandler:
         # Build messages array
         messages = []
         separate_system = config.get('separate_system_messages', False)
-        
-        # Handle system messages - OpenRouter prefers single system message
-        if separate_system and len(system_parts) > 1:
-            # For separate system messages, add each as individual system messages
-            for part in system_parts:
-                if part and part.strip():
-                    messages.append({"role": "system", "content": part.strip()})
-        else:
-            # Combine all system content into one message (recommended for OpenRouter)
-            combined_system = "\n".join(filter(None, [part.strip() for part in system_parts]))
-            if combined_system:
-                messages.append({"role": "system", "content": combined_system})
-        
-        # Add instructions as system message
+        content_role = 'system'
+
+        # Preset/prompt message must be first system message
         if instructions:
             messages.append({"role": "system", "content": instructions})
+
+        # Add scraped/assembled content as selected role
+        if content_text and content_text.strip():
+            messages.append({"role": content_role, "content": content_text.strip()})
         
         # Handle user message with proper content structure
-        if image_object and provider != "groq":
+        images = APIHandler._normalize_images(image_objects)
+        if images and provider != "groq":
             # Multi-modal content for vision models
-            base64_image = ImageHandler.to_base64(image_object)
-            if base64_image:
-                user_content = [
-                    {"type": "text", "text": "Generate the character based on the provided content and image."},
-                    {
-                        "type": "image_url", 
-                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
-                    }
-                ]
+            user_content = [
+                {"type": "text", "text": "Generate the character based on the provided content and images."}
+            ]
+
+            added_images = 0
+            for img in images:
+                base64_image = ImageHandler.to_base64(img)
+                if base64_image:
+                    user_content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
+                        }
+                    )
+                    added_images += 1
+
+            if added_images > 0:
                 messages.append({"role": "user", "content": user_content})
             else:
                 # Fallback if image processing fails
@@ -108,6 +135,10 @@ class APIHandler:
         else:
             # Text-only content
             messages.append({"role": "user", "content": "Generate the character based on the provided content."})
+
+        # If separate message mode is disabled, combine adjacent same-role messages
+        if not separate_system:
+            messages = APIHandler._combine_same_roles(messages)
         
         # API configuration
         api_urls = {
@@ -182,7 +213,7 @@ class APIHandler:
             raise ValueError(f"Invalid JSON response: {str(e)}")
     
     @staticmethod
-    def call_gemini(config, system_parts, instructions, image_object):
+    def call_gemini(config, content_text, instructions, image_objects):
         """Handle Gemini API calls"""
         if not genai:
             raise ImportError("'google-genai' library not installed")
@@ -192,68 +223,79 @@ class APIHandler:
             raise ValueError("Gemini API key not set")
         
         client = genai.Client(api_key=api_key)
-        use_system_instruction = config.get('separate_system_messages', False)
+        content_role = 'system'
+
         provider_models = config.get('provider_models', {})
         model_name = provider_models.get('gemini')
-        if use_system_instruction:
-            print("INFO: Using 'system_instruction' for system messages.")
-            user_content = [instructions] if instructions else []
-            if image_object:
-                user_content.append(image_object)
-            response = client.models.generate_content(
-                model=model_name,
-                config=genai_types.GenerateContentConfig(
-                    system_instruction="\n".join(system_parts)
-                ),
-                contents=user_content
-            )
+        # Preset/prompt must be first system content.
+        system_chunks = [instructions] if instructions else []
+        user_content = []
+
+        if content_text and content_text.strip():
+            if content_role == 'system':
+                system_chunks.append(content_text.strip())
+            else:
+                user_content.append(content_text.strip())
+
+        images = APIHandler._normalize_images(image_objects)
+
+        if images:
+            user_content.append("Generate the character based on the provided content and image.")
+            user_content.extend(images)
         else:
-            print("INFO: Combining all messages into the 'contents' parameter.")
-            contents = system_parts + ([instructions] if instructions else [])
-            if image_object:
-                contents.append(image_object)
-            response = client.models.generate_content(
-                model=model_name,
-                contents=contents
-            )
+            user_content.append("Generate the character based on the provided content.")
+
+        use_grounding = config.get('gemini_grounding', False)
+        tools = [GoogleSearch] if use_grounding else None
+
+        response = client.models.generate_content(
+            model=model_name,
+            config=genai_types.GenerateContentConfig(
+                system_instruction="\n\n".join([chunk for chunk in system_chunks if chunk]),
+                tools=tools
+            ),
+            contents=user_content
+        )
             
         return response.text
     
     @staticmethod
     def build_content(base_content, additional_instructions):
-        """Build content parts for API calls"""
-        system_parts = []
-        
+        """Build content payload and preset instructions for API calls."""
+        content_chunks = []
+
         if base_content and base_content.strip():
-            system_parts.append(base_content.strip())
-        
+            content_chunks.append(base_content.strip())
+
         if additional_instructions and additional_instructions.strip():
-            system_parts.append(f"ADDITIONAL INSTRUCTIONS:\n{additional_instructions.strip()}")
-        
-        return system_parts or [""], APIHandler.INSTRUCTIONS
+            content_chunks.append(f"ADDITIONAL INSTRUCTIONS:\n{additional_instructions.strip()}")
+
+        content_text = "\n\n".join(content_chunks)
+        return content_text, APIHandler.INSTRUCTIONS
 
     @staticmethod
     def generate_character(config, base_content, image_object=None, additional_instructions=None):
         """Main character generation function"""
         provider = config['api_provider']
+        images = APIHandler._normalize_images(image_object)
         
         if not provider:
             raise ValueError("No API provider configured")
         
-        if image_object and provider == 'groq':
-            print("Warning: Groq does not support image input. Image will be ignored.")
-            image_object = None
+        if images and provider == 'groq':
+            print("Warning: Groq does not support image input. Images will be ignored.")
+            images = []
         
-        if not base_content and not image_object:
+        if not base_content and not images:
             raise ValueError("No content provided")
         
-        system_parts, instructions = APIHandler.build_content(base_content, additional_instructions)
+        content_text, instructions = APIHandler.build_content(base_content, additional_instructions)
         
         print(f"Sending request to {provider.title()}...")
         
         if provider == "gemini":
-            return APIHandler.call_gemini(config, system_parts, instructions, image_object)
+            return APIHandler.call_gemini(config, content_text, instructions, images)
         elif provider in ["groq", "openrouter"]:
-            return APIHandler.call_openai_style(config, system_parts, instructions, image_object)
+            return APIHandler.call_openai_style(config, content_text, instructions, images)
         else:
             raise ValueError(f"Unknown provider '{provider}'")
