@@ -111,6 +111,18 @@ def count_tokens(text, model="gpt-4"):
 
 def run_character_creation_flow(config):
     """Main character creation workflow"""
+    # Check if selected scraper engine is available
+    engine = config.get('scraper_engine', 'legacy')
+    if engine == 'crawl4ai' and not _is_crawl4ai_installed():
+        print("\n✗ ERROR: crawl4ai is not installed!")
+        print("To install crawl4ai, run:")
+        print("  pip install crawl4ai")
+        print("\nFor more information, visit: https://github.com/unclecode/crawl4ai")
+        print("\nSwitching back to legacy scraper...")
+        config['scraper_engine'] = 'legacy'
+        config_manager.save_config(config)
+        return
+    
     urls, initial_image_object = get_inputs_from_user()
     if not urls and not initial_image_object:
         print("No content provided. Returning to menu.")
@@ -216,6 +228,9 @@ def update_config_setting(config, setting_key, prompt, valid_values=None):
 
         new = input(f"Enter new provider ({'/'.join(providers)}): ").lower().strip()
         if new in providers:
+            if new == 'groq':
+                print("\n⚠️  **WARNING!**\nRecently groq began to restrict multiple accounts due to violation of their terms of service, be very careful using this service because it can get your organization restricted.\n")
+                input("Press enter to continue...")
             if config_manager.change_provider(config, new):
                 print(f"✓ Provider changed to {new}")
                 return None  # Stay in menu
@@ -292,6 +307,14 @@ def _toggle_separate_system_messages(config):
     print(f"✓ Separate system messages is now {status}.")
     return None  # Stay in menu
 
+def _is_crawl4ai_installed():
+    """Check if crawl4ai library is installed"""
+    try:
+        import crawl4ai
+        return True
+    except ImportError:
+        return False
+
 def _exit_program():
     """Exit the program - returns True to break the loop"""
     print("Exiting program.")
@@ -316,14 +339,17 @@ def _scraping_options_menu(config):
         
         print(f"  Current Engine: {engine}")
         if engine == 'crawl4ai':
-            print(f"  Headless Mode: {headless}")
+            print(f"  Headless Mode (Recommended: false): {headless}")
         print(f"{'-'*40}")
         
         options = [
-            "Switch Scraper Engine (legacy / crawl4ai)",
-            "Toggle Crawl4AI Headless Mode",
-            "Back to Settings"
+            "Switch Scraper Engine (legacy / crawl4ai)"
         ]
+        
+        if _is_crawl4ai_installed():
+            options.append("Toggle Crawl4AI Headless Mode")
+        
+        options.append("Back to Settings")
         
         for i, opt in enumerate(options, 1):
             print(f"{i}. {opt}")
@@ -331,13 +357,37 @@ def _scraping_options_menu(config):
         choice = input("\nSelect option > ").strip()
         
         if choice == '1':
-            update_config_setting(config, 'scraper_engine', 'Select Engine', ['legacy', 'crawl4ai'])
+            value = input("Select Engine (legacy/crawl4ai): ").lower().strip()
+            if value == 'crawl4ai':
+                if not _is_crawl4ai_installed():
+                    print("\n✗ ERROR: crawl4ai is not installed!")
+                    print("To install crawl4ai, run:")
+                    print("  pip install crawl4ai")
+                    print("\nFor more information, visit: https://github.com/unclecode/crawl4ai")
+                else:
+                    config['scraper_engine'] = value
+                    config_manager.save_config(config)
+                    print(f"✓ Scraper engine switched to {value}")
+            elif value == 'legacy':
+                config['scraper_engine'] = value
+                config_manager.save_config(config)
+                print(f"✓ Scraper engine switched to {value}")
+            else:
+                print("Invalid engine selection.")
         elif choice == '2':
-            current_h = config.get('crawl4ai_headless', True)
-            config['crawl4ai_headless'] = not current_h
-            config_manager.save_config(config)
-            print(f"✓ Headless mode is now {'enabled' if not current_h else 'disabled'}.")
-        elif choice == '3':
+            if _is_crawl4ai_installed():
+                # Toggle Crawl4AI Headless Mode
+                current_h = config.get('crawl4ai_headless', True)
+                config['crawl4ai_headless'] = not current_h
+                config_manager.save_config(config)
+                print(f"✓ Headless mode is now {'enabled' if not current_h else 'disabled'}.")
+            else:
+                # If not installed, option 2 is "Back to Settings"
+                break
+        elif choice == '3' and _is_crawl4ai_installed():
+            break
+        elif choice == '2' and not _is_crawl4ai_installed():
+            # Back button when crawl4ai is not installed
             break
 
 def _settings_menu(config):

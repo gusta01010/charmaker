@@ -223,7 +223,7 @@ class CharMakerTkinterApp:
         self.scraper_engine_cb.bind("<<ComboboxSelected>>", self.on_scraper_engine_change)
 
         self.crawl4ai_headless_var = tk.BooleanVar(value=self.config.get('crawl4ai_headless', True))
-        self.crawl4ai_headless_chk = ttk.Checkbutton(scraping_frame, text="Use Headless Mode", variable=self.crawl4ai_headless_var, command=self.on_headless_mode_toggle)
+        self.crawl4ai_headless_chk = ttk.Checkbutton(scraping_frame, text="Use Headless Mode (recommended: off)", variable=self.crawl4ai_headless_var, command=self.on_headless_mode_toggle)
 
         self.update_scraper_options()
 
@@ -443,6 +443,12 @@ using same 3 URLS + 1 image and gemini-3-flash-preview to generate.\n\n"""
     def on_provider_change(self, event=None):
         provider = self.provider_var.get()
         self.config['api_provider'] = provider
+
+        if provider == 'groq':
+            messagebox.showwarning(
+                "⚠️ Groq API Warning",
+                "**WARNING!**\n\nRecently groq began to restrict multiple accounts due to violation of their terms of service, be very careful using this service because it can get your organization restricted."
+            )
 
         model = config_manager.get_current_model(self.config)
         self.model_var.set(model)
