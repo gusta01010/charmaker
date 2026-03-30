@@ -14,7 +14,7 @@ using the same 2 URLS + 2 images and gemini-3-flash-preview + crawl4ai to genera
 
 Preset 1: Experimental,  great results.
 Preset 2: Tends to write shorter descriptions (1300 - 2100)
-Preset 3: Tends to write longer descriptions (2000 - 3500)
+Preset 3: Tends to write longer descriptions (2000 - 3500), great results. Lower average consistency, but its peak generations can sometimes surpass Preset 1.
 """
 
 from presets import PRESET1, PRESET2, PRESET3

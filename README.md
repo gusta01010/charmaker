@@ -42,7 +42,7 @@ CharMaker offers two ways to interact with the tool:
 
 ## Usage
 
-1. Run `main.py`
+1. Run `main.py` for terminal mode or `interface.py` for GUI mode
 
 2. Set up your desired save folder, provider, with your own API key:
     - Choose API provider (Gemini, Groq, or OpenRouter)
