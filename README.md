@@ -17,7 +17,7 @@ This open-source tool helps you create a desired character by appending to AI th
 ## Key Features
 
 - **Multi-Provider AI Support**: Gemini, Groq, and OpenRouter APIs
-- **Multiple Scraper Engines**: Selenium and Crawl4AI options
+- **Multiple Scraper Engines**: Selenium and Crawl4AI (slightly better and accurate) options
 - **Advanced Image Handling**: Local files, URLs, and default templates
 - **Token Counting**: Monitor API usage before generation
 - **Customizable Presets**: Predefined character generation templates
@@ -52,19 +52,27 @@ CharMaker offers two ways to interact with the tool:
 3. Start Character Creation - You can:
     - **Append URLs** of characters from wikis or databases
     - **Append image URLs** for visual reference
-    - Use `!` to **load images from your local computer**
-    - Press `ENTER` in the empty input box to send the appended information
+    - (Terminal-only) Use `!` to **load images from your local computer**
+    - (Terminal-only) Press `ENTER` in the empty input box to send the appended information
 
 4. After scraping its contents and the AI returns the character's metadata, you can:
-    - Save the character card image using **SillyTavern's default .png template**, **Image from local computer** or **Image from a URL**
-    - Retry (You can send additional instruction as user to AI for feedback)
-    - Discard (Discards the character)
+    - (Terminal-only) Save the character card image using **SillyTavern's default .png template**, **Image from local computer** or **Image from a URL**
+    - (Terminal-only) Retry (You can send additional instruction as user to AI for feedback)
+    - (Terminal-only) Discard (Discards the character)
+    - (Gui-mode only) The character is saved automatically.
 
-The character card will be saved in the set up save folder.
+The character card will be saved in the set up save path folder.
 
 ## Branches
 * `main`: Designed to work with known characters with internet information, supports multiple AI providers
 * `cftf` (Card for this feeling): Designed to work with **images only**, generating a card of a character based on the image(s) given
+
+## Screenshots
+### GUI mode
+![](https://files.catbox.moe/rk3bce.png)
+
+### Terminal Mode
+![](https://files.catbox.moe/yfmyyx.png)
 
 ## License
 This project is licensed under the [MIT License](./LICENSE) - see the `LICENSE` file for details.
