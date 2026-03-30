@@ -21,7 +21,7 @@ from main import parse_ai_response
 class CharMakerTkinterApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("✨ CharMaker AI Interface")
+        self.root.title("CharMaker")
         self.root.geometry("1020x720")
         self.root.minsize(760, 640)
 
@@ -132,7 +132,7 @@ class CharMakerTkinterApp:
         
         titles_frame = ttk.Frame(header_frame)
         titles_frame.pack(side="left", fill="x", expand=True)
-        ttk.Label(titles_frame, text="CharMaker AI Generation", style='Header.TLabel').pack(anchor="w")
+        ttk.Label(titles_frame, text="CharMaker", style='Header.TLabel').pack(anchor="w")
         ttk.Label(titles_frame, text="Provide URLs and parameters to fully construct and generate character cards automatically.", style='SubHeader.TLabel').pack(anchor="w")
 
         self.main_paned = ttk.Frame(self.root)
