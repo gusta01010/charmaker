@@ -69,10 +69,10 @@ The character card will be saved in the set up save path folder.
 
 ## Screenshots
 ### GUI mode
-![](https://files.catbox.moe/rk3bce.png)
+![](https://files.catbox.moe/yfmyyx.png)
 
 ### Terminal Mode
-![](https://files.catbox.moe/yfmyyx.png)
+![](https://files.catbox.moe/rk3bce.png)
 
 ## License
 This project is licensed under the [MIT License](./LICENSE) - see the `LICENSE` file for details.
