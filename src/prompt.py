@@ -2,7 +2,7 @@
 Scorecard (Accuracy + Roleplaying quality):
         	Description    Greeting     Combined  
 Preset 1    88.3           88.0         88.2
-Preset 2    78.0           84.3         81.2 
+Preset 2    ?              ?            ? 
 Preset 3    82.0           78.0         80.0
 
 -Average analyzed with internet sources from the models:

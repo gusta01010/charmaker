@@ -369,12 +369,12 @@ class CharMakerTkinterApp:
         help_text = (
             "Presets control how the AI formats and styles the characters.\n\n"
             "• Preset 1: Experimental,  great results.\n"
-            "• Preset 2: Tends to write shorter descriptions (1300 - 2100 tokens).\n"
+            "• Preset 2: Experimental alternate.\n"
             "• Preset 3: Tends to write longer descriptions (2000 - 3500 tokens). Lower average consistency, but its peak generations can sometimes surpass Preset 1.\n\n"
             """Scorecard (Accuracy + Roleplaying quality):
             Description	      Greeting	Combined
 Preset 1    88.3	         88.0	     88.2
-Preset 2    78.0	         84.3	     81.2
+Preset 2    ?	             ?	         ?
 Preset 3    82.0	         78.0	     80.0
 
 -Average analyzed with internet sources from the models:
