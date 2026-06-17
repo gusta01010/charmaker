@@ -65,6 +65,7 @@ The character card will be saved in the set up save path folder.
 
 ## Branches
 * `main`: Designed to work with known characters with internet information, supports multiple AI providers
+* `experimental`: Designed to work if using crawl4ai and has trycloudflare errors
 * `cftf` (Card for this feeling): Designed to work with **images only**, generating a card of a character based on the image(s) given
 
 ## Screenshots
