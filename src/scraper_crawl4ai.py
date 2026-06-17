@@ -7,12 +7,12 @@ from playwright.async_api import async_playwright
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
-# Configurações de ambiente para silenciar avisos do Node
+# Environment configurations to silence Node warnings
 os.environ["NODE_OPTIONS"] = "--no-deprecation"
 
 class ScraperCrawl4AI:
     def __init__(self):
-        # Seletores para remover elementos indesejados (exatamente como no filtro original)
+        # Selectors to remove unwanted elements (exactly as in the original filter)
         self.excluded_selector = (
             ".toc, .wds-global-footer, #catlinks, .printfooter, .global-top-navigation, "
             ".notifications-placeholder, #community-navigation, .community-header-wrapper, "
@@ -29,7 +29,7 @@ class ScraperCrawl4AI:
             ".adthrive-footer, .raptive-content-terms-modal, .adthrive-ccpa-modal, "
             "#adt-ii, #adthrive-mcmp"
         )
-        # Tenta carregar configuração se disponível
+        # Tries to load config if available
         try:
             import config_manager
             self.config = config_manager.load_config()
@@ -39,13 +39,13 @@ class ScraperCrawl4AI:
         self.browser_path = self._get_browser_path()
 
     def _get_browser_path(self):
-        """Tenta encontrar um navegador compatível no sistema."""
-        # 1. Tenta o caminho manual do config.json
+        """Tries to find a compatible browser on the system."""
+        # 1. Tries manual path from config.json
         manual_path = self.config.get("browser_config", {}).get("binary_path")
         if manual_path and os.path.exists(manual_path):
             return manual_path
 
-        # 2. Caminhos comuns para Brave, Chrome e Edge (Windows prioritário)
+        # 2. Common paths for Brave, Chrome and Edge (Windows priority)
         potential_paths = [
             # Brave
             os.path.expandvars(r"%ProgramFiles%\BraveSoftware\Brave-Browser\Application\brave.exe"),
@@ -62,22 +62,22 @@ class ScraperCrawl4AI:
 
         for path in potential_paths:
             if os.path.exists(path):
-                print(f"✅ Navegador encontrado: {path}")
+                print(f"✅ Browser found: {path}")
                 return path
 
-        # Se nada for encontrado, retorna o padrão antigo como fallback e avisa
-        print("⚠️ Nenhum navegador compatível encontrado automaticamente.")
+        # If nothing is found, returns the old default as fallback and warns
+        print("⚠️ No compatible browser found automatically.")
         return r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
 
     async def _start_browser(self):
-        """Inicia o navegador em uma instância isolada com porta de debug habilitada."""
-        print(f"🌐 Iniciando nova instância isolada do navegador em: {self.browser_path}")
+        """Starts the browser in an isolated instance with debug port enabled."""
+        print(f"🌐 Starting new isolated browser instance at: {self.browser_path}")
         
-        # Cria um diretório de perfil local para garantir que seja uma janela nova e isolada
+        # Creates a local profile directory to ensure it's a new and isolated window
         profile_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".crawl4ai_profile")
         os.makedirs(profile_path, exist_ok=True)
         
-        # Comando para abrir o navegador via subprocess
+        # Command to open the browser via subprocess
         cmd = [
             self.browser_path,
             "--remote-debugging-port=9222",
@@ -88,22 +88,22 @@ class ScraperCrawl4AI:
         ]
         
         proc = subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
-        print("⏳ Aguardando inicialização do ambiente isolado...")
-        await asyncio.sleep(5)  # Aguarda o navegador estabilizar (ASYNC)
+        print("⏳ Waiting for isolated environment initialization...")
+        await asyncio.sleep(5)  # Waits for the browser to stabilize (ASYNC)
         return proc
 
     async def scrape(self, urls):
         """
-        Executa o processo de scraping:
-        1. Abre o Navegador
-        2. Resolve o Cloudflare (se houver) para cada URL
-        3. Captura o HTML de cada página
-        4. Processa com Crawl4AI via prefixo raw://
+        Executes the scraping process:
+        1. Opens the Browser
+        2. Resolves Cloudflare (if any) for each URL
+        3. Captures the HTML of each page
+        4. Processes with Crawl4AI via raw:// prefix
         """
         if isinstance(urls, str):
             urls = [urls]
 
-        # Limpa URLs vazias ou duplicadas
+        # Clears empty or duplicate URLs
         urls = [u.strip() for u in urls if u and u.strip()]
         if not urls:
             return ""
@@ -113,51 +113,51 @@ class ScraperCrawl4AI:
         
         async with async_playwright() as p:
             try:
-                # Conecta ao navegador via IPv4 para evitar erro ECONNREFUSED ::1
+                # Connects to the browser via IPv4 to avoid ECONNREFUSED ::1 error
                 browser = None
-                for i in range(10): # Aumentado o número de tentativas
+                for i in range(10): # Increased number of attempts
                     try:
                         browser = await p.chromium.connect_over_cdp("http://127.0.0.1:9222", timeout=30000)
                         break
                     except Exception as e:
                         if i == 9: raise e
-                        print(f"   ⏳ Tentativa {i+1} de conexão falhou, tentando novamente...")
+                        print(f"   ⏳ Connection attempt {i+1} failed, retrying...")
                         await asyncio.sleep(2)
 
                 if not browser:
-                    raise Exception("Não foi possível conectar ao navegador via CDP.")
+                    raise Exception("Could not connect to the browser via CDP.")
 
-                # Pega o contexto padrão
+                # Gets default context
                 context = browser.contexts[0]
                 
-                # REUTILIZA UMA ÚNICA PÁGINA para evitar erros de "Target closed" e "Failed to open tab"
+                # REUSES A SINGLE PAGE to avoid "Target closed" and "Failed to open tab" errors
                 page = await context.new_page()
                 
-                # Fecha as abas iniciais vazias (exceto a nossa)
+                # Closes initial empty tabs (except ours)
                 for p_to_close in context.pages:
                     if p_to_close != page:
                         try:
                             await p_to_close.close()
                         except: pass
 
-                # Inicializa o crawler SEM configuração de browser para evitar conflitos de Playwright
-                # Se usarmos raw://, o Crawl4AI pode funcionar apenas como processador de HTML
+                # Initializes crawler WITHOUT browser config to avoid Playwright conflicts
+                # If we use raw://, Crawl4AI can function only as an HTML processor
                 async with AsyncWebCrawler(verbose=False) as crawler:
                     for url in urls:
                         try:
-                            # Verifica se o browser ainda está conectado
+                            # Checks if browser is still connected
                             if not browser.is_connected():
-                                print("⚠️ Conexão com o navegador perdida. Tentando reconectar...")
+                                print("⚠️ Browser connection lost. Attempting to reconnect...")
                                 browser = await p.chromium.connect_over_cdp("http://127.0.0.1:9222", timeout=30000)
                                 context = browser.contexts[0]
                                 page = await context.new_page()
 
-                            print(f"📥 Acessando: {url}")
+                            print(f"📥 Accessing: {url}")
                             await page.goto(url, timeout=90000, wait_until="domcontentloaded")
                             
-                            # Loop de detecção do Cloudflare (Ray ID)
-                            print(f"🔍 Verificando proteções para {url}...")
-                            for attempt in range(300): # 5 minutos
+                            # Cloudflare detection loop (Ray ID)
+                            print(f"🔍 Checking protections for {url}...")
+                            for attempt in range(300): # 5 minutes
                                 try:
                                     status = await page.evaluate("""() => {
                                         const isWaiting = document.title.includes('Just a moment') || 
@@ -174,16 +174,16 @@ class ScraperCrawl4AI:
                                     }""")
                                     
                                     if not status['isBlocked']:
-                                        # Verifica se o conteúdo real carregou
+                                        # Checks if real content loaded
                                         text = await page.evaluate("document.body?.innerText || ''")
                                         if len(text.strip()) > 100:
-                                            print("   ✅ Conteúdo carregado/verificado.")
+                                            print("   ✅ Content loaded/verified.")
                                             break
                                     else:
                                         if attempt % 15 == 0:
-                                            print(f"   ⏳ [Ação Necessária] Barreira Cloudflare detectada. Resolva o desafio no navegador...")
+                                            print(f"   ⏳ [Action Required] Cloudflare barrier detected. Solve the challenge in the browser...")
                                 except Exception as e:
-                                    # Se a página foi fechada ou algo assim
+                                    # If the page was closed or something
                                     if "closed" in str(e).lower():
                                         raise e
                                     pass
@@ -192,8 +192,8 @@ class ScraperCrawl4AI:
                             await asyncio.sleep(2.0)
                             raw_html = await page.content()
                             
-                            # Processamento com Crawl4AI
-                            print(f"🔄 Processando conteúdo com Crawl4AI ({url})...")
+                            # Processing with Crawl4AI
+                            print(f"🔄 Processing content with Crawl4AI ({url})...")
                             
                             run_config = CrawlerRunConfig(
                                 css_selector="body",
@@ -204,25 +204,25 @@ class ScraperCrawl4AI:
                                 ),
                             )
                             
-                            # IMPORTANTE: Usamos o crawler apenas para converter o HTML que JA TEMOS
+                            # IMPORTANT: We use the crawler only to convert the HTML we ALREADY HAVE
                             result = await crawler.arun(url=f"raw://{raw_html}", config=run_config)
                             if result.success:
                                 all_markdowns.append(result.markdown)
                             else:
-                                print(f"❌ Erro no Crawl4AI: {result.error_message}")
+                                print(f"❌ Crawl4AI error: {result.error_message}")
                                 
                         except Exception as e:
-                            print(f"❌ Erro ao processar URL {url}: {e}")
+                            print(f"❌ Error processing URL {url}: {e}")
                             if "closed" in str(e).lower():
-                                # Se o browser morreu, tenta reabrir na próxima URL do loop via reconexão no topo
+                                # If the browser died, try to reopen on next URL via reconnection at top
                                 break
                 
             except Exception as e:
-                print(f"❌ Erro crítico na conexão com o navegador: {e}")
+                print(f"❌ Critical error in browser connection: {e}")
             
             finally:
-                # Limpeza: Mata apenas a instância específica do navegador que abrimos
-                print("\n🏁 Finalizando scraper e fechando janela...")
+                # Cleanup: Kills only the specific browser instance we opened
+                print("\n🏁 Finishing scraper and closing window...")
                 try:
                     if 'browser' in locals() and browser:
                         await browser.close()
@@ -236,18 +236,18 @@ class ScraperCrawl4AI:
         
         return "\n\n".join(all_markdowns)
     
-# Interface de compatibilidade para o resto do projeto
+# Compatibility interface for the rest of the project
 def scrape_url(urls):
     scraper = ScraperCrawl4AI()
     return asyncio.run(scraper.scrape(urls))
 
 if __name__ == "__main__":
-    # Teste rápido e salvamento em arquivo para compatibilidade com o modo manual
+    # Quick test and file saving for manual mode compatibility
     test_urls = [
         "https://taimanin.fandom.com",
     ]
     
-    print("\n🚀 Iniciando modo manual do ScraperCrawl4AI...")
+    print("\n🚀 Starting manual mode for ScraperCrawl4AI...")
     resultado = scrape_url(test_urls)
     
     if resultado:
@@ -255,9 +255,9 @@ if __name__ == "__main__":
         try:
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(resultado)
-            print(f"\n✅ Sucesso! Conteúdo extraído e salvo em: {output_file}")
-            print(f"Resumo: {resultado[:200]}...")
+            print(f"\n✅ Success! Content extracted and saved to: {output_file}")
+            print(f"Summary: {resultado[:200]}...")
         except Exception as e:
-            print(f"❌ Erro ao salvar arquivo: {e}")
+            print(f"❌ Error saving file: {e}")
     else:
-        print("\n❌ Falha na extração.")
+        print("\n❌ Extraction failed.")
