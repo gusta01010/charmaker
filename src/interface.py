@@ -12,7 +12,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from image_handler import ImageHandler
 from api_handler import APIHandler
-from scraper import scrape_with_selenium, scrape_with_crawl4ai
+from scraper_crawl4ai import scrape_url as scrape_with_crawl4ai
+from scraper_legacy import scrape_with_selenium
 from character_card import save_character_card
 import config_manager
 from main import parse_ai_response
@@ -175,7 +176,7 @@ class CharMakerTkinterApp:
         provider_box_frame.grid(row=0, column=1, sticky="w", padx=10, pady=(0, 10))
         
         self.provider_var = tk.StringVar(value=self.config.get('api_provider', 'groq'))
-        self.provider_cb = ttk.Combobox(provider_box_frame, textvariable=self.provider_var, values=["groq", "openrouter", "gemini"], state="readonly", width=18)
+        self.provider_cb = ttk.Combobox(provider_box_frame, textvariable=self.provider_var, values=["groq", "openrouter", "gemini", "nanogpt"], state="readonly", width=18)
         self.provider_cb.pack(side="left")
         self.provider_cb.bind("<<ComboboxSelected>>", self.on_provider_change)
 
@@ -322,15 +323,17 @@ class CharMakerTkinterApp:
         
         def load_img():
             try:
-                if path.startswith("http"):
+                if ImageHandler.is_image_url(path):
                     headers = {'User-Agent': 'Mozilla/5.0'}
                     resp = requests.get(path, headers=headers, stream=True, timeout=5)
                     resp.raise_for_status()
                     img = Image.open(io.BytesIO(resp.content))
                 else:
-                    if not os.path.exists(path):
+                    # Strip quotes for local paths
+                    clean_path = path.strip().strip('"').strip("'")
+                    if not os.path.exists(clean_path):
                         raise Exception("File not found")
-                    img = Image.open(path)
+                    img = Image.open(clean_path)
                     
                 img.thumbnail((90, 90))
                 photo = ImageTk.PhotoImage(img)
@@ -510,7 +513,7 @@ using same 3 URLS + 1 image and gemini-3-flash-preview to generate.\n\n"""
             gen_image_objects = []
             
             for url in raw_urls:
-                if ImageHandler.is_image_url(url):
+                if ImageHandler.is_image_url(url) or ImageHandler.is_local_image(url):
                     self.update_status("Loading generation visual references...")
                     loaded_img = ImageHandler.load_image(url)
                     if loaded_img:
@@ -525,8 +528,7 @@ using same 3 URLS + 1 image and gemini-3-flash-preview to generate.\n\n"""
                 self.update_status(f"Scraping URLs (fetching web content from {len(urls_to_scrape)} sources)...")
                 engine = self.config.get('scraper_engine', 'legacy (scraper.py)')
                 if engine == 'crawl4ai':
-                    headless = self.config.get('crawl4ai_headless', True)
-                    scraped_content = scrape_with_crawl4ai(urls_to_scrape, headless=headless)
+                    scraped_content = scrape_with_crawl4ai(urls_to_scrape)
                     if scraped_content is None:
                         # Fallback
                         scraped_content = scrape_with_selenium(urls_to_scrape)

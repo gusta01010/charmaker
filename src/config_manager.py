@@ -11,6 +11,7 @@ DEFAULT_CONFIG = {
     "groq_api_key": "YOUR_GROQ_API_KEY_HERE",
     "openrouter_api_key": "YOUR_OPENROUTER_API_KEY_HERE",
     "gemini_api_key": "YOUR_GEMINI_API_KEY_HERE",
+    "nanogpt_api_key": "YOUR_NANOGPT_API_KEY_HERE",
     "separate_system_messages": False,
     "browser_config": {
         "browser_type": None,
@@ -20,7 +21,8 @@ DEFAULT_CONFIG = {
     "provider_models": {
         "groq": "llama-3.1-70b-versatile",
         "openrouter": "openai/gpt-4o-mini",
-        "gemini": "gemini-2.0-flash-exp"
+        "gemini": "gemini-2.0-flash-exp",
+        "nanogpt": "gpt-4o-mini"
     }
 }
 
@@ -95,7 +97,7 @@ def set_provider_model(config, provider, model_name):
 
 def change_provider(config, new_provider):
     """Change the current provider while preserving all API keys and models."""
-    if new_provider not in ["groq", "openrouter", "gemini"]:
+    if new_provider not in ["groq", "openrouter", "gemini", "nanogpt"]:
         print(f"Invalid provider: {new_provider}")
         return False
     

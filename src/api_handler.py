@@ -143,7 +143,8 @@ class APIHandler:
         # API configuration
         api_urls = {
             "groq": "https://api.groq.com/openai/v1/chat/completions",
-            "openrouter": "https://openrouter.ai/api/v1/chat/completions"
+            "openrouter": "https://openrouter.ai/api/v1/chat/completions",
+            "nanogpt": "https://nano-gpt.com/api/v1/chat/completions"
         }
         
         api_url = api_urls.get(provider)
@@ -181,7 +182,7 @@ class APIHandler:
                 api_url, 
                 headers=headers, 
                 json=payload,
-                timeout=60
+                timeout=600
             )
             
             # Enhanced error handling
@@ -295,7 +296,7 @@ class APIHandler:
         
         if provider == "gemini":
             return APIHandler.call_gemini(config, content_text, instructions, images)
-        elif provider in ["groq", "openrouter"]:
+        elif provider in ["groq", "openrouter", "nanogpt"]:
             return APIHandler.call_openai_style(config, content_text, instructions, images)
         else:
             raise ValueError(f"Unknown provider '{provider}'")

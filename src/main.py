@@ -5,7 +5,8 @@ import requests
 import tempfile
 from image_handler import ImageHandler
 from api_handler import APIHandler
-from scraper import scrape_with_selenium, is_valid_url_format
+from scraper_crawl4ai import scrape_url
+from scraper_legacy import is_valid_url_format
 from character_card import save_character_card
 import config_manager
 import file_dialogs 
@@ -14,13 +15,15 @@ def parse_ai_response(ai_response):
     """Extract character fields from AI response"""
     character_details = {}
     keys = ["NAME", "DESCRIPTION", "PERSONALITY_SUMMARY", "SCENARIO", "GREETING_MESSAGE", "EXAMPLE_MESSAGES"]
-    pattern = re.compile(r'(' + '|'.join(keys) + r')\s*:(.*?)(?=\n(?:' + '|'.join(keys) + r')\s*:|\Z)', re.DOTALL | re.IGNORECASE)
+    pattern = re.compile(r'^(' + '|'.join(keys) + r')\s*:(.*?)(?=(?:\n^(' + '|'.join(keys) + r')\s*:)|(?:\Z))', re.DOTALL | re.MULTILINE)
     
-    for key, value in pattern.findall(ai_response):
-        val = value.strip().replace('**', '').replace('*', '').strip()
-        if key.upper().strip() == "NAME":
+    for match in pattern.finditer(ai_response):
+        key = match.group(1).upper().strip()
+        value = match.group(2).strip()
+        val = value.replace('**', '').replace('*', '').strip()
+        if key == "NAME":
             val = val[:100]
-        character_details[key.upper().strip()] = val
+        character_details[key] = val
     
     return character_details
 
@@ -40,10 +43,10 @@ def get_inputs_from_user():
             
         if user_input == '!':
             image_object = ImageHandler.load_image(user_input)
-        elif ImageHandler.is_image_url(user_input):
+        elif ImageHandler.is_image_url(user_input) or ImageHandler.is_local_image(user_input):
             image_object = ImageHandler.load_image(user_input)
             if image_object:
-                print("✓ Image loaded from URL")
+                print("✓ Image loaded")
         else:
             # process as regular URL
             url = user_input if user_input.startswith('http') else 'https://' + user_input
@@ -131,7 +134,14 @@ def run_character_creation_flow(config):
     # scrape content if urls provided
     scraped_content = ""
     if urls:
-        scraped_content = scrape_with_selenium(urls)
+        # Usando o novo scraper para cada URL
+        combined_markdown = []
+        for url in urls:
+            md = scrape_url(url)
+            if md:
+                combined_markdown.append(md)
+        scraped_content = "\n\n".join(combined_markdown)
+        
         if not scraped_content or not scraped_content.strip():
             print("Warning: No text content scraped.")
     
@@ -218,7 +228,7 @@ def update_config_setting(config, setting_key, prompt, valid_values=None):
     """Unified config updater - returns None to stay in menu"""
     if setting_key == 'provider_change':
         current = config.get('api_provider', 'groq')
-        providers = ['groq', 'openrouter', 'gemini']
+        providers = ['groq', 'openrouter', 'gemini', 'nanogpt']
         print(f"\nCurrent provider: {current}\nAvailable providers:")
         for p in providers:
             key = config.get(f'{p}_api_key', '')
@@ -250,8 +260,8 @@ def update_config_setting(config, setting_key, prompt, valid_values=None):
         print("No model name provided.")
 
     elif setting_key == 'api_key_setup':
-        provider = input("Enter provider to configure API key (groq/openrouter/gemini): ").lower().strip()
-        if provider in ['groq', 'openrouter', 'gemini']:
+        provider = input("Enter provider to configure API key (groq/openrouter/gemini/nanogpt): ").lower().strip()
+        if provider in ['groq', 'openrouter', 'gemini', 'nanogpt']:
             api_key = input(f"Enter API key for {provider}: ").strip()
             if api_key:
                 config[f'{provider}_api_key'] = api_key

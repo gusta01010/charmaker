@@ -15,60 +15,41 @@ class ImageHandler:
     
     @staticmethod
     def is_image_url(url):
-        """Check if URL points to an image, handling complex URLs"""
-        if not url.lower().startswith('http'):
+        """Check if URL points to an image using HEAD request or extension detection."""
+        if not isinstance(url, str) or not url.lower().startswith('http'):
             return False
             
-        # Parse URL and check extension
-        parsed = urlparse(url.lower())
-        path = parsed.path
-        
-        # look for extensions anywhere in the path, ignoring anything after the extension
-        # e.g., wiki/images/Alectra.png/revision/latest will trigger here.
-        if any(f"{ext}/" in path or path.endswith(ext) for ext in ImageHandler.SUPPORTED_FORMATS):
-            return True
-            
-        # fallback path regex lookup for images that have query parameters or deeper paths
-        import re
-        if re.search(r'\.(jpg|jpeg|png|gif|webp|bmp)(/|\?|$)', url.lower()):
-            return True
-        
-        image_indicators = ['image', 'img', 'photo', 'pic', 'thumb', 'avatar', 'banner']
-        url_parts = url.lower().replace('/', ' ').replace('-', ' ').replace('_', ' ').split()
-        
-        # only matches if indicator is a separate word/segment
-        if any(indicator in url_parts for indicator in image_indicators):
-            return True
-        
-        image_domains = [
-            'imgur.com', 'i.imgur.com',
-            'images.unsplash.com', 'unsplash.com',
-            'pixabay.com', 'pexels.com',
-            'flickr.com', 'staticflickr.com',
-            'googleusercontent.com',
-            'amazonaws.com',
-            'cloudfront.net',
-            'cdn.discordapp.com',
-            'media.discordapp.net'
-        ]
-        
-        domain = parsed.netloc.lower()
-        if any(img_domain in domain for img_domain in image_domains):
-            return True
-        
-        query_params = parse_qs(parsed.query)
-        image_format_params = ['f', 'format', 'type', 'ext']
-        for param in image_format_params:
-            if param in query_params:
-                param_value = query_params[param][0].lower() if query_params[param] else ''
-                if any(fmt.strip('.') in param_value for fmt in ImageHandler.SUPPORTED_FORMATS):
+        try:
+            # Method 1: Check Content-Type via a lightweight HEAD request
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            response = requests.head(url, headers=headers, timeout=5, allow_redirects=True)
+            content_type = response.headers.get('content-type', '').lower()
+            # Some CDNs (like Brave Search) use application/octet-stream for images
+            if content_type.startswith('image/') or content_type == 'application/octet-stream':
+                # If octet-stream, we rely more on the extension fallback or just assume True if it's from an image domain
+                if content_type.startswith('image/'):
                     return True
-        
+        except requests.RequestException:
+            pass
+            
         import re
-        if re.search(r'/(images?|img|photos?|pics?|media)/.*\.(jpg|jpeg|png|gif|webp|bmp)$', path):
-            return True
-        
-        return False
+        # Method 2: Robust regex to check for image extensions or image-service domains
+        # Includes checks for common search engine image proxies (brave, google, etc.)
+        image_patterns = [
+            r'(?i)\.(jpg|jpeg|png|gif|webp|bmp)(?:/|\?|$)',
+            r'(?i)imgs\.search\.',
+            r'(?i)gstatic\.com/images'
+        ]
+        return any(re.search(pattern, url) for pattern in image_patterns)
+    
+    @staticmethod
+    def is_local_image(path):
+        """Check if path is a valid local image file."""
+        if not isinstance(path, str) or path.startswith('http') or path == '!':
+            return False
+        # Remove whitespace and quotes if user pasted path with quotes
+        clean_path = path.strip().strip('"').strip("'")
+        return os.path.exists(clean_path) and any(clean_path.lower().endswith(ext) for ext in ImageHandler.SUPPORTED_FORMATS)
         
     @staticmethod
     def load_from_url(url, timeout=10):
@@ -126,16 +107,24 @@ class ImageHandler:
     @staticmethod
     def load_image(source):
         """Universal image loader - handles URLs, file paths, or dialog"""
+        if not source:
+            return None
+            
         if source == '!':
             filepath = file_dialogs.open_image_dialog()
             return ImageHandler.load_from_file(filepath) if filepath else None
-        elif ImageHandler.is_image_url(source):
+        
+        # Handle URLs
+        if ImageHandler.is_image_url(source):
             return ImageHandler.load_from_url(source)
-        elif os.path.exists(source):
-            return ImageHandler.load_from_file(source)
-        else:
-            print(f"✗ Invalid image source: {source}")
-            return None
+            
+        # Handle local files (including those with quotes)
+        clean_path = source.strip().strip('"').strip("'")
+        if os.path.exists(clean_path):
+            return ImageHandler.load_from_file(clean_path)
+        
+        print(f"✗ Invalid image source: {source}")
+        return None
     
     @staticmethod
     def to_base64(image, format='JPEG', quality=85):
